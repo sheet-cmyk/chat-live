@@ -78,7 +78,25 @@ class MyBet {
   const MyBet({required this.items, required this.totalAmount, required this.paid});
 
   factory MyBet.fromMap(Map<String, dynamic> d) {
-    // Support both old single-bet format and new multi-bet format
+    // New map format: {f0: 5000, f3: 10000, totalAmount: ..., paid: ...}
+    final mapItems = <BetItem>[];
+    for (final e in d.entries) {
+      if (e.key.length >= 2 && e.key.startsWith('f')) {
+        final fi = int.tryParse(e.key.substring(1));
+        if (fi != null && fi >= 0 && fi < 8) {
+          final amt = (e.value as num?)?.toInt() ?? 0;
+          if (amt > 0) mapItems.add(BetItem(foodIndex: fi, amount: amt));
+        }
+      }
+    }
+    if (mapItems.isNotEmpty) {
+      return MyBet(
+        items: mapItems,
+        totalAmount: (d['totalAmount'] as num?)?.toInt() ?? mapItems.fold(0, (s, i) => s + i.amount),
+        paid: d['paid'] as bool? ?? false,
+      );
+    }
+    // Old array format
     if (d.containsKey('items')) {
       final items = (d['items'] as List<dynamic>)
           .map((i) => BetItem.fromMap(i as Map<String, dynamic>)).toList();
@@ -278,6 +296,34 @@ class GreedyStarRepository {
       // Refund on Firestore write failure
       await _wallet.addCoins(uid, total, 'استرداد رهان Greedy Star');
       return 'فشل تسجيل الرهان، حاول مرة أخرى';
+    }
+  }
+
+  // ── Immediate tap-bet (no confirm) ───────────────────────────────
+  // Each tap deducts amount and upserts into the bet doc using map keys (f0..f7)
+
+  Future<String?> tapBet({
+    required int roundId,
+    required int foodIndex,
+    required int amount,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return 'يجب تسجيل الدخول';
+
+    final ok = await _wallet.deductCoins(uid, amount, 'رهان Greedy Star جولة $roundId');
+    if (!ok) return 'رصيدك غير كافٍ';
+
+    try {
+      await _bets(roundId).doc(uid).set({
+        'f$foodIndex': FieldValue.increment(amount),
+        'totalAmount': FieldValue.increment(amount),
+        'paid': false,
+        'placedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      return null;
+    } catch (e) {
+      await _wallet.addCoins(uid, amount, 'استرداد رهان Greedy Star جولة $roundId');
+      return 'فشل التسجيل، حاول مرة أخرى';
     }
   }
 

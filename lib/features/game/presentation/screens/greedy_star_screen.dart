@@ -51,6 +51,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   GsState? _state;
   MyBet? _myBet;
   Map<int, int> _betterCounts = {}; // foodIndex → player count
+  Map<int, int> _foodTotals = {};   // foodIndex → total coins from ALL players
 
   // Local UI
   String _localPhase = 'loading';
@@ -58,14 +59,12 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   int _resultCountdown = 7;
   int _highlight = -1;
 
-  // Draft bets: foodIndex → accumulated amount
-  final Map<int, int> _draft = {};
-  int _selectedAmount = 1000; // currently active chip on amount bar
+  int _selectedAmount = 1000; // active chip on amount bar
+  Set<int> _tapping = {};     // foods with in-flight tapBet request
 
   int _myWinAmount = 0;
   bool _claimDone = false;
   String? _toast;
-  bool _isPlacing = false;
   final _records = <Map<String, dynamic>>[];
   int? _trackedRound;
 
@@ -150,22 +149,25 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       _allBetsSub = _repo.watchBets(state.roundId).listen((snap) {
         if (!mounted) return;
         final counts = <int, int>{};
+        final totals = <int, int>{};
         for (final doc in snap.docs) {
           final d = doc.data() as Map<String, dynamic>;
           final bet = MyBet.fromMap(d);
           for (final item in bet.items) {
             counts[item.foodIndex] = (counts[item.foodIndex] ?? 0) + 1;
+            totals[item.foodIndex] = (totals[item.foodIndex] ?? 0) + item.amount;
           }
         }
-        setState(() => _betterCounts = counts);
+        setState(() { _betterCounts = counts; _foodTotals = totals; });
       });
 
       setState(() {
         _myBet = null;
         _myWinAmount = 0;
         _claimDone = false;
-        _draft.clear();
+        _tapping = {};
         _betterCounts = {};
+        _foodTotals = {};
       });
     }
 
@@ -285,45 +287,33 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     if (_records.length > 20) _records.removeLast();
   }
 
-  // ── Draft bet actions ──────────────────────────────────────────────
+  // ── Bet actions ────────────────────────────────────────────────────
 
-  // Each tap adds _selectedAmount to that food (cumulative, no undo)
-  void _onFoodTap(int fi, int coins) {
-    if (_localPhase != 'betting' || _myBet != null) return;
-    if (_selectedAmount == 0) { _showToast('اختر مبلغاً من الشريط أولاً'); return; }
-    if (!_draft.containsKey(fi) && _draft.length >= 6) {
+  void _onAmountTap(int amt) => setState(() => _selectedAmount = amt);
+
+  // Each food tap immediately deducts coins and writes to Firebase (no confirm)
+  Future<void> _onFoodTap(int fi, int coins) async {
+    if (_localPhase != 'betting') { _showToast('انتهى وقت الرهان'); return; }
+    if (_selectedAmount == 0) { _showToast('اختر مبلغاً أولاً'); return; }
+    if (_tapping.contains(fi)) return; // already in-flight for this food
+    if (_selectedAmount > coins) { _showToast('رصيدك غير كافٍ 🪙'); return; }
+
+    // 6-food limit
+    final bet = _myBet;
+    if (bet != null && !bet.hasBetOn(fi) && bet.items.length >= 6) {
       _showToast('الحد الأقصى 6 أطعمة مختلفة');
       return;
     }
-    final newTotal = _draft.values.fold(0, (s, v) => s + v) + _selectedAmount;
-    if (newTotal > coins) { _showToast('رصيدك غير كافٍ 🪙'); return; }
-    setState(() => _draft[fi] = (_draft[fi] ?? 0) + _selectedAmount);
-  }
 
-  void _onAmountTap(int amt) {
-    setState(() => _selectedAmount = amt);
-  }
-
-  Future<void> _onBet(int coins) async {
-    if (_localPhase != 'betting') { _showToast('انتهى وقت الرهان'); return; }
-    if (_myBet != null) { _showToast('رهنت بالفعل في هذه الجولة'); return; }
-    if (_draft.isEmpty) { _showToast('اضغط على الأطعمة لإضافة رهانات'); return; }
-    final total = _draft.values.fold(0, (s, v) => s + v);
-    if (total > coins) { _showToast('رصيدك غير كافٍ — المطلوب ${_fmtNum(total)} 🪙'); return; }
-
-    setState(() => _isPlacing = true);
-    final err = await _repo.placeMultiBet(
+    setState(() => _tapping.add(fi));
+    final err = await _repo.tapBet(
       roundId: _state!.roundId,
-      bets: Map.from(_draft),
+      foodIndex: fi,
+      amount: _selectedAmount,
     );
     if (!mounted) return;
-    setState(() => _isPlacing = false);
-    if (err != null) {
-      _showToast(err);
-    } else {
-      setState(() => _draft.clear());
-      _showToast('✅ تم تسجيل رهانك!');
-    }
+    setState(() => _tapping.remove(fi));
+    if (err != null) _showToast(err);
   }
 
   void _showToast(String msg) {
@@ -361,7 +351,8 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                       _buildWheelArea(coins),
                       _buildPhaseBar(),
                       _buildAmountBar(),
-                      if (_myBet != null) _buildPlacedBetSummary() else _buildBetBar(coins),
+                      if (_myBet != null) _buildPlacedBetSummary(),
+                      _buildLiveBar(),
                       _buildBottomRow(coins),
                       const SizedBox(height: 8),
                     ]),
@@ -490,20 +481,19 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     final by = cy + r * sin(angle);
     final food = _kFoods[i];
 
-    final inDraft = _draft.containsKey(i);
-    final draftAmt = _draft[i] ?? 0;
     final isMyBet = _myBet?.hasBetOn(i) ?? false;
     final myBetAmt = _myBet?.amountFor(i) ?? 0;
+    final isTapping = _tapping.contains(i);
     final isHighlighted = _highlight == i;
     final isWinner = _state?.winnerIndex == i && _localPhase == 'result';
     final betterCount = _betterCounts[i] ?? 0;
-    final canBet = _localPhase == 'betting' && _myBet == null;
+    final canBet = _localPhase == 'betting';
 
     Widget bubble = AnimatedBuilder(
       animation: Listenable.merge([_pulseCtrl, _glowCtrl]),
       builder: (_, __) {
-        final scale = (inDraft || isMyBet) && _localPhase == 'betting' ? _pulse.value : 1.0;
-        final glowR = isHighlighted ? _glow.value : (inDraft ? 8.0 : 0.0);
+        final scale = isMyBet && _localPhase == 'betting' ? _pulse.value : 1.0;
+        final glowR = isHighlighted ? _glow.value : (isMyBet ? 8.0 : 0.0);
         return Transform.scale(
           scale: scale,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -517,7 +507,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                         ? [Colors.white, const Color(0xFFFFE066), const Color(0xFFFF8C00)]
                         : isWinner
                             ? [const Color(0xFFFFFFAA), const Color(0xFFFFD700), const Color(0xFFFF8C00)]
-                            : inDraft || isMyBet
+                            : isMyBet
                                 ? [const Color(0xFFFFE8A0), const Color(0xFFFFB300), const Color(0xFFE07000)]
                                 : [const Color(0xFFFFD580), const Color(0xFFFF9500), const Color(0xFFE07000)],
                     center: const Alignment(-0.3, -0.3), radius: 0.85,
@@ -525,43 +515,43 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                   border: Border.all(
                     color: isHighlighted ? Colors.white
                         : isMyBet ? const Color(0xFF27AE60)
-                        : inDraft ? const Color(0xFFFFD700)
                         : const Color(0xFFDAA520),
-                    width: isHighlighted ? 4 : (isMyBet || inDraft) ? 3.5 : 2.5,
+                    width: isHighlighted ? 4 : isMyBet ? 3.5 : 2.5,
                   ),
                   boxShadow: [BoxShadow(
                     color: isHighlighted ? Colors.white.withAlpha(220)
-                        : inDraft ? const Color(0xFFFFD700).withAlpha(160)
+                        : isMyBet ? Colors.green.withAlpha(140)
                         : Colors.black.withAlpha(55),
                     blurRadius: glowR + 4, spreadRadius: isHighlighted ? 3 : 0,
                   )],
                 ),
-                child: Stack(children: [
-                  // Emoji — shifted up slightly to leave room for multiplier
-                  Align(
-                    alignment: const Alignment(0, -0.30),
-                    child: Text(food.emoji, style: TextStyle(fontSize: bSize * 0.43)),
-                  ),
-                  // Multiplier INSIDE the circle at the bottom — bold & clear
-                  Positioned(
-                    bottom: 6, left: 0, right: 0,
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withAlpha(160),
-                          borderRadius: BorderRadius.circular(8),
+                child: isTapping
+                    ? const Center(child: SizedBox(width: 22, height: 22,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)))
+                    : Stack(children: [
+                        Align(
+                          alignment: const Alignment(0, -0.30),
+                          child: Text(food.emoji, style: TextStyle(fontSize: bSize * 0.43)),
                         ),
-                        child: Text('×${food.mult}',
-                          style: const TextStyle(color: Colors.white, fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                            shadows: [Shadow(color: Colors.black, blurRadius: 2)])),
-                      ),
-                    ),
-                  ),
-                ]),
+                        Positioned(
+                          bottom: 6, left: 0, right: 0,
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withAlpha(160),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text('×${food.mult}',
+                                style: const TextStyle(color: Colors.white, fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  shadows: [Shadow(color: Colors.black, blurRadius: 2)])),
+                            ),
+                          ),
+                        ),
+                      ]),
               ),
-              // Betters count
+              // Betters count badge
               if (betterCount > 0)
                 Positioned(top: -5, right: -5,
                   child: Container(
@@ -580,21 +570,19 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                       child: const Text('HOT', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900)),
                     ))),
             ]),
-            // Amount below circle — full number (e.g. 10,500) when bet is set
-            if ((inDraft && draftAmt > 0) || (isMyBet && myBetAmt > 0))
+            // Amount below bubble — shown when user has bet on this food
+            if (isMyBet && myBetAmt > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 3),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isMyBet ? const Color(0xFF1A6B38) : const Color(0xFF7A3A00),
+                    color: const Color(0xFF1A6B38),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.white, width: 1),
                   ),
-                  child: Text(
-                    _fmtFull(isMyBet ? myBetAmt : draftAmt),
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900),
-                  ),
+                  child: Text(_fmtFull(myBetAmt),
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900)),
                 ),
               )
             else
@@ -613,43 +601,44 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
 
   Widget _buildCenterStar(double cx, double cy) {
     return Positioned(
-      left: cx - 48, top: cy - 62,
-      child: SizedBox(
-        width: 96,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14),
-              boxShadow: [BoxShadow(color: Colors.black.withAlpha(60), blurRadius: 6)]),
-            child: Column(children: [
-              if (_localPhase == 'betting') ...[
-                const Text('حدد الوقت', style: TextStyle(color: Color(0xFF7A4200), fontSize: 9, fontFamily: 'Cairo', fontWeight: FontWeight.bold)),
-                Text('${_countdown}S', style: const TextStyle(color: Color(0xFFE05000), fontSize: 20, fontWeight: FontWeight.w900)),
-              ] else if (_localPhase == 'spinning')
-                const Text('دوران...', style: TextStyle(color: Color(0xFF7A4200), fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.w800))
-              else if (_localPhase == 'result')
-                Text('${_resultCountdown}S', style: const TextStyle(color: Color(0xFFE05000), fontSize: 20, fontWeight: FontWeight.w900))
-              else
-                const SizedBox(height: 26, child: Center(child: SizedBox(width: 16, height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFE05000))))),
-            ]),
+      // Center the circle: cx-46 horizontally, cy-46 vertically
+      left: cx - 46, top: cy - 46,
+      child: Container(
+        width: 92, height: 92,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(46),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF2ECC71), Color(0xFF27AE60), Color(0xFF1A7A3A)],
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
           ),
-          const SizedBox(height: 5),
-          Container(
-            width: 92, height: 76,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(46),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF2ECC71), Color(0xFF27AE60), Color(0xFF1A7A3A)],
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
-              ),
-              border: Border.all(color: const Color(0xFFDAA520), width: 3),
-              boxShadow: [BoxShadow(color: Colors.green.withAlpha(100), blurRadius: 10, spreadRadius: 2)],
-            ),
-            child: AnimatedBuilder(
-              animation: _starY,
-              builder: (_, child) => Transform.translate(offset: Offset(0, _starY.value), child: child),
-              child: _buildStarChar(),
+          border: Border.all(color: const Color(0xFFDAA520), width: 3),
+          boxShadow: [BoxShadow(color: Colors.green.withAlpha(100), blurRadius: 12, spreadRadius: 2)],
+        ),
+        child: Stack(children: [
+          // Star bouncing in center
+          AnimatedBuilder(
+            animation: _starY,
+            builder: (_, child) => Transform.translate(offset: Offset(0, _starY.value + 6), child: child),
+            child: _buildStarChar(),
+          ),
+          // Countdown overlaid at top inside the circle
+          Positioned(
+            top: 4, left: 0, right: 0,
+            child: Center(
+              child: _localPhase == 'betting'
+                  ? Text('$_countdown',
+                      style: const TextStyle(color: Colors.white, fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        shadows: [Shadow(color: Colors.black54, blurRadius: 4)]))
+                  : _localPhase == 'result'
+                      ? Text('$_resultCountdown',
+                          style: const TextStyle(color: Colors.white, fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            shadows: [Shadow(color: Colors.black54, blurRadius: 4)]))
+                      : _localPhase == 'spinning'
+                          ? const Text('🎡', style: TextStyle(fontSize: 16))
+                          : const SizedBox(width: 16, height: 16,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
             ),
           ),
         ]),
@@ -692,12 +681,9 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     String msg;
     if (_localPhase == 'betting') {
       if (_myBet != null) {
-        msg = '✅ رهانك مسجّل — ${_myBet!.items.length} طعام، مجموع ${_fmtNum(_myBet!.totalAmount)} 🪙';
-      } else if (_draft.isNotEmpty) {
-        final total = _draft.values.fold(0, (s, v) => s + v);
-        msg = 'رهانك: ${_fmtFull(total)} 🪙 على ${_draft.length} طعام — اضغط "راهن" للتسجيل';
+        msg = '✅ رهانك: ${_fmtFull(_myBet!.totalAmount)} 🪙 على ${_myBet!.items.length} طعام — اضغط مجدداً لإضافة المزيد';
       } else {
-        msg = 'اختر المبلغ ← اضغط على الطعام لإضافة الرهان';
+        msg = 'اختر المبلغ 👇  ثم اضغط على الطعام مباشرةً';
       }
     } else if (_localPhase == 'spinning') {
       msg = '🎡 العجلة تدور... انتظر النتيجة';
@@ -785,86 +771,86 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     );
   }
 
-  // ── Bet bar — shows draft summary + RAH BET button ────────────────
+  // ── Live community bar — shows all players' bets per food ──────────
 
-  Widget _buildBetBar(int coins) {
-    if (_localPhase != 'betting') return const SizedBox.shrink();
-
-    final total = _draft.values.fold(0, (s, v) => s + v);
-    final canBet = _draft.isNotEmpty && total <= coins && !_isPlacing;
+  Widget _buildLiveBar() {
+    final maxTotal = _foodTotals.values.fold(0, (a, b) => b > a ? b : a);
+    final totalPlayers = _betterCounts.values.fold(0, (a, b) => a + b);
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(10, 5, 10, 5),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
       decoration: BoxDecoration(
-        color: Colors.black.withAlpha(90),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _draft.isEmpty
-              ? Colors.white.withAlpha(30)
-              : const Color(0xFFFFD700).withAlpha(120),
-          width: 1.5,
+        color: Colors.black.withAlpha(110),
+        border: const Border(
+          top: BorderSide(color: Color(0xFF3A1A00), width: 2),
+          bottom: BorderSide(color: Color(0xFF3A1A00), width: 2),
         ),
       ),
-      child: Row(children: [
-        // Draft chips
-        Expanded(
-          child: _draft.isEmpty
-              ? Text('اضغط على الأطعمة لإضافة رهانات',
-                  style: TextStyle(color: Colors.white.withAlpha(100), fontFamily: 'Cairo', fontSize: 11))
-              : Wrap(spacing: 5, runSpacing: 4, children: _draft.entries.map((e) {
-                  final food = _kFoods[e.key];
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(18),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFFFD700).withAlpha(80)),
-                    ),
-                    child: Text(
-                      '${food.emoji} ${_fmtFull(e.value)}',
-                      style: const TextStyle(color: Colors.white, fontFamily: 'Cairo',
-                          fontWeight: FontWeight.w700, fontSize: 11),
-                    ),
-                  );
-                }).toList()),
-        ),
-        const SizedBox(width: 8),
-        // BET button
-        GestureDetector(
-          onTap: canBet ? () => _onBet(coins) : null,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: canBet
-                    ? [const Color(0xFF27AE60), const Color(0xFF1A7A3A)]
-                    : [Colors.grey.shade700, Colors.grey.shade800],
-              ),
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: canBet
-                  ? [BoxShadow(color: Colors.green.withAlpha(120), blurRadius: 10)]
-                  : [],
-            ),
-            child: _isPlacing
-                ? const SizedBox(width: 22, height: 22,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                : Column(mainAxisSize: MainAxisSize.min, children: [
-                    const Text('راهن', style: TextStyle(color: Colors.white,
-                        fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 14)),
-                    if (total > 0)
-                      Text('${_fmtFull(total)} 🪙',
-                        style: const TextStyle(color: Color(0xFFFFD700),
-                            fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 10)),
-                  ]),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Header
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Text('👥', style: TextStyle(fontSize: 12)),
+          const SizedBox(width: 4),
+          Text('رهانات جميع اللاعبين — $totalPlayers مشارك',
+            style: const TextStyle(color: Colors.white70, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 6),
+        // Per-food bars
+        SizedBox(
+          height: 58,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: List.generate(8, (i) {
+              final food = _kFoods[i];
+              final total = _foodTotals[i] ?? 0;
+              final count = _betterCounts[i] ?? 0;
+              final frac = maxTotal > 0 ? total / maxTotal : 0.0;
+              final barH = (frac * 28).clamp(3.0, 28.0);
+              final isMine = _myBet?.hasBetOn(i) ?? false;
+
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (count > 0)
+                        Text('$count', style: const TextStyle(color: Colors.white60, fontSize: 8, fontWeight: FontWeight.bold)),
+                      Text(food.emoji, style: const TextStyle(fontSize: 14)),
+                      const SizedBox(height: 2),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 400),
+                        height: barH,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: isMine
+                                ? [const Color(0xFF27AE60), const Color(0xFF1A7A3A)]
+                                : [const Color(0xFFFFD700), const Color(0xFFFF8C00)],
+                            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                          boxShadow: isMine
+                              ? [BoxShadow(color: Colors.green.withAlpha(100), blurRadius: 4)]
+                              : [],
+                        ),
+                      ),
+                      if (total > 0)
+                        Text(_fmtNum(total),
+                          style: TextStyle(
+                            color: isMine ? const Color(0xFF27AE60) : const Color(0xFFFFD700),
+                            fontSize: 7, fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                ),
+              );
+            }),
           ),
         ),
       ]),
     );
   }
 
-  // ── Placed bet summary (after confirming) ──────────────────────────
+  // ── Placed bet summary ─────────────────────────────────────────────
 
   Widget _buildPlacedBetSummary() {
     final bet = _myBet;
