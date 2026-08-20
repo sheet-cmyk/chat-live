@@ -56,16 +56,58 @@ class GsState {
   }
 }
 
-class MyBet {
+// Represents one food entry in a user's multi-bet
+class BetItem {
   final int foodIndex, amount;
-  final bool paid;
-  const MyBet({required this.foodIndex, required this.amount, required this.paid});
+  const BetItem({required this.foodIndex, required this.amount});
 
-  factory MyBet.fromMap(Map<String, dynamic> d) => MyBet(
+  factory BetItem.fromMap(Map<String, dynamic> d) => BetItem(
     foodIndex: (d['foodIndex'] as num).toInt(),
     amount: (d['amount'] as num).toInt(),
-    paid: d['paid'] as bool? ?? false,
   );
+
+  Map<String, dynamic> toMap() => {'foodIndex': foodIndex, 'amount': amount};
+}
+
+// A user's full bet for one round (can have up to 6 food items)
+class MyBet {
+  final List<BetItem> items;   // each food → its amount
+  final int totalAmount;
+  final bool paid;
+
+  const MyBet({required this.items, required this.totalAmount, required this.paid});
+
+  factory MyBet.fromMap(Map<String, dynamic> d) {
+    // Support both old single-bet format and new multi-bet format
+    if (d.containsKey('items')) {
+      final items = (d['items'] as List<dynamic>)
+          .map((i) => BetItem.fromMap(i as Map<String, dynamic>)).toList();
+      return MyBet(
+        items: items,
+        totalAmount: (d['totalAmount'] as num?)?.toInt() ?? items.fold(0, (s, i) => s + i.amount),
+        paid: d['paid'] as bool? ?? false,
+      );
+    }
+    // Legacy single-bet
+    final fi = (d['foodIndex'] as num?)?.toInt() ?? 0;
+    final amt = (d['amount'] as num?)?.toInt() ?? 0;
+    return MyBet(
+      items: [BetItem(foodIndex: fi, amount: amt)],
+      totalAmount: amt,
+      paid: d['paid'] as bool? ?? false,
+    );
+  }
+
+  // Returns amount bet on a specific food
+  int amountFor(int foodIndex) {
+    for (final item in items) {
+      if (item.foodIndex == foodIndex) return item.amount;
+    }
+    return 0;
+  }
+
+  // Returns true if user bet on this food
+  bool hasBetOn(int foodIndex) => items.any((i) => i.foodIndex == foodIndex);
 }
 
 // ── Repository ────────────────────────────────────────────────────────────────
@@ -137,22 +179,23 @@ class GreedyStarRepository {
   }
 
   Future<bool> tryTransitionToResult(int roundId, int winnerIndex) async {
-    // Compute top winners from bets
+    // Compute top winners from multi-item bets
     List<Map<String, dynamic>> top = [];
     try {
       final betsSnap = await _bets(roundId).get();
       final mult = multipliers[winnerIndex];
       for (final doc in betsSnap.docs) {
         final data = doc.data() as Map<String, dynamic>;
-        if ((data['foodIndex'] as num).toInt() != winnerIndex) continue;
-        final amount = (data['amount'] as num).toInt() * mult;
+        final bet = MyBet.fromMap(data);
+        final winAmt = bet.amountFor(winnerIndex) * mult;
+        if (winAmt <= 0) continue;
         final userSnap = await _db.collection('users').doc(doc.id).get();
         final ud = userSnap.data();
         top.add({
           'userId': doc.id,
           'userName': ud?['name'] ?? ud?['username'] ?? 'مجهول',
           'avatar': ud?['avatar'],
-          'amount': amount,
+          'amount': winAmt,
         });
       }
       top.sort((a, b) => (b['amount'] as int).compareTo(a['amount'] as int));
@@ -195,40 +238,55 @@ class GreedyStarRepository {
     return done;
   }
 
-  // ── Bet ───────────────────────────────────────────────────────────
+  // ── Place multi-bet ───────────────────────────────────────────────
 
-  Future<String?> placeBet({
-    required int roundId, required int foodIndex, required int amount,
+  // bets: foodIndex → amount (1–6 entries, each amount > 0)
+  Future<String?> placeMultiBet({
+    required int roundId,
+    required Map<int, int> bets,
   }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return 'يجب تسجيل الدخول';
+    if (bets.isEmpty) return 'اختر طعاماً واحداً على الأقل';
+
+    final validBets = Map.fromEntries(bets.entries.where((e) => e.value > 0));
+    if (validBets.isEmpty) return 'أضف مبلغاً للرهان';
+
+    final total = validBets.values.fold(0, (s, v) => s + v);
 
     // Check no existing bet
     final existing = await _bets(roundId).doc(uid).get();
-    if (existing.exists) return 'لقد رهنت في هذه الجولة بالفعل';
+    if (existing.exists) return 'رهنت بالفعل في هذه الجولة';
 
-    final ok = await _wallet.deductCoins(uid, amount, 'رهان Greedy Star جولة $roundId');
+    // Deduct total from wallet
+    final ok = await _wallet.deductCoins(uid, total, 'رهان Greedy Star جولة $roundId');
     if (!ok) return 'رصيدك من العملات غير كافٍ';
 
+    // Write multi-bet doc
+    final items = validBets.entries
+        .map((e) => {'foodIndex': e.key, 'amount': e.value})
+        .toList();
     try {
       await _bets(roundId).doc(uid).set({
-        'foodIndex': foodIndex,
-        'amount': amount,
+        'items': items,
+        'totalAmount': total,
         'placedAt': FieldValue.serverTimestamp(),
         'paid': false,
       });
       return null;
     } catch (e) {
-      await _wallet.addCoins(uid, amount, 'استرداد رهان Greedy Star');
+      // Refund on Firestore write failure
+      await _wallet.addCoins(uid, total, 'استرداد رهان Greedy Star');
       return 'فشل تسجيل الرهان، حاول مرة أخرى';
     }
   }
 
-  // ── Claim payout ──────────────────────────────────────────────────
+  // ── Claim payout (handles multi-item bets) ────────────────────────
 
   Future<int> claimPayout(int roundId, int winnerIndex) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return 0;
+    final mult = multipliers[winnerIndex];
     int claimed = 0;
     try {
       await _db.runTransaction((t) async {
@@ -237,9 +295,12 @@ class GreedyStarRepository {
         if (!snap.exists) return;
         final data = snap.data() as Map<String, dynamic>;
         if (data['paid'] == true) return;
-        if ((data['foodIndex'] as num).toInt() != winnerIndex) return;
-        final mult = multipliers[winnerIndex];
-        claimed = (data['amount'] as num).toInt() * mult;
+
+        final bet = MyBet.fromMap(data);
+        final winningAmt = bet.amountFor(winnerIndex);
+        if (winningAmt <= 0) return;
+
+        claimed = winningAmt * mult;
         t.update(_db.collection('users').doc(uid), {'coins': FieldValue.increment(claimed)});
         t.update(betRef, {'paid': true, 'winAmount': claimed});
       });
