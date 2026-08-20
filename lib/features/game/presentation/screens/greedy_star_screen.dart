@@ -51,7 +51,6 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   GsState? _state;
   MyBet? _myBet;
   Map<int, int> _betterCounts = {}; // foodIndex → player count
-  Map<int, int> _foodTotals = {};   // foodIndex → total coins from ALL players
 
   // Local UI
   String _localPhase = 'loading';
@@ -71,8 +70,6 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   // Animations
   late AnimationController _starCtrl;
   late Animation<double> _starY;
-  late AnimationController _pulseCtrl;
-  late Animation<double> _pulse;
   late AnimationController _glowCtrl;
   late Animation<double> _glow;
   late AnimationController _resultCtrl;
@@ -96,11 +93,6 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     _starY = Tween<double>(begin: 0, end: -7)
         .animate(CurvedAnimation(parent: _starCtrl, curve: Curves.easeInOut));
 
-    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 650))
-      ..repeat(reverse: true);
-    _pulse = Tween<double>(begin: 1.0, end: 1.12)
-        .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
-
     _glowCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 500))
       ..repeat(reverse: true);
     _glow = Tween<double>(begin: 4.0, end: 14.0)
@@ -119,7 +111,6 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     _t1?.cancel();
     _t2?.cancel();
     _starCtrl.dispose();
-    _pulseCtrl.dispose();
     _glowCtrl.dispose();
     _resultCtrl.dispose();
     super.dispose();
@@ -149,16 +140,14 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       _allBetsSub = _repo.watchBets(state.roundId).listen((snap) {
         if (!mounted) return;
         final counts = <int, int>{};
-        final totals = <int, int>{};
         for (final doc in snap.docs) {
           final d = doc.data() as Map<String, dynamic>;
           final bet = MyBet.fromMap(d);
           for (final item in bet.items) {
             counts[item.foodIndex] = (counts[item.foodIndex] ?? 0) + 1;
-            totals[item.foodIndex] = (totals[item.foodIndex] ?? 0) + item.amount;
           }
         }
-        setState(() { _betterCounts = counts; _foodTotals = totals; });
+        setState(() => _betterCounts = counts);
       });
 
       setState(() {
@@ -167,7 +156,6 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
         _claimDone = false;
         _tapping = {};
         _betterCounts = {};
-        _foodTotals = {};
       });
     }
 
@@ -352,7 +340,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                       _buildPhaseBar(),
                       _buildAmountBar(),
                       if (_myBet != null) _buildPlacedBetSummary(),
-                      _buildLiveBar(),
+                      _buildRecentBar(),
                       _buildBottomRow(coins),
                       const SizedBox(height: 8),
                     ]),
@@ -490,10 +478,10 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     final canBet = _localPhase == 'betting';
 
     Widget bubble = AnimatedBuilder(
-      animation: Listenable.merge([_pulseCtrl, _glowCtrl]),
+      animation: _glowCtrl,
       builder: (_, __) {
-        final scale = isMyBet && _localPhase == 'betting' ? _pulse.value : 1.0;
-        final glowR = isHighlighted ? _glow.value : (isMyBet ? 8.0 : 0.0);
+        const scale = 1.0; // bubbles stay fixed when bet is placed
+        final glowR = isHighlighted ? _glow.value : 0.0;
         return Transform.scale(
           scale: scale,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -709,7 +697,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   // ── Amount bar — select chip, then tap foods to accumulate ───────────
 
   Widget _buildAmountBar() {
-    final canBet = _localPhase == 'betting' && _myBet == null;
+    final canBet = _localPhase == 'betting'; // stays active even after placing bets
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -771,80 +759,75 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     );
   }
 
-  // ── Live community bar — shows all players' bets per food ──────────
+  // ── Recent winners bar — history strip showing last 20 winning foods ─
 
-  Widget _buildLiveBar() {
-    final maxTotal = _foodTotals.values.fold(0, (a, b) => b > a ? b : a);
-    final totalPlayers = _betterCounts.values.fold(0, (a, b) => a + b);
+  Widget _buildRecentBar() {
+    final winners = _state?.lastWinners ?? [];
+    // Also show current round winner if in result phase
+    final all = [
+      ...winners,
+      if (_localPhase == 'result' && (_state?.winnerIndex != null)) _state!.winnerIndex!,
+    ];
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
+      padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
       decoration: BoxDecoration(
-        color: Colors.black.withAlpha(110),
+        color: Colors.black.withAlpha(120),
         border: const Border(
           top: BorderSide(color: Color(0xFF3A1A00), width: 2),
           bottom: BorderSide(color: Color(0xFF3A1A00), width: 2),
         ),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        // Header
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Text('👥', style: TextStyle(fontSize: 12)),
+        Row(children: [
+          const Text('📊', style: TextStyle(fontSize: 10)),
           const SizedBox(width: 4),
-          Text('رهانات جميع اللاعبين — $totalPlayers مشارك',
-            style: const TextStyle(color: Colors.white70, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.bold)),
+          const Text('آخر النتائج',
+            style: TextStyle(color: Colors.white54, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.bold)),
+          const Spacer(),
+          Text('${all.length} جولة',
+            style: const TextStyle(color: Colors.white38, fontFamily: 'Cairo', fontSize: 9)),
         ]),
-        const SizedBox(height: 6),
-        // Per-food bars
+        const SizedBox(height: 4),
         SizedBox(
-          height: 58,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: List.generate(8, (i) {
-              final food = _kFoods[i];
-              final total = _foodTotals[i] ?? 0;
-              final count = _betterCounts[i] ?? 0;
-              final frac = maxTotal > 0 ? total / maxTotal : 0.0;
-              final barH = (frac * 28).clamp(3.0, 28.0);
-              final isMine = _myBet?.hasBetOn(i) ?? false;
-
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      if (count > 0)
-                        Text('$count', style: const TextStyle(color: Colors.white60, fontSize: 8, fontWeight: FontWeight.bold)),
-                      Text(food.emoji, style: const TextStyle(fontSize: 14)),
-                      const SizedBox(height: 2),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 400),
-                        height: barH,
+          height: 36,
+          child: all.isEmpty
+              ? Center(child: Text('ستظهر النتائج هنا بعد انتهاء كل جولة',
+                  style: TextStyle(color: Colors.white.withAlpha(60), fontFamily: 'Cairo', fontSize: 9)))
+              : ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  reverse: false,
+                  itemCount: all.length,
+                  itemBuilder: (_, idx) {
+                    final fi = all[idx];
+                    final isLatest = idx == all.length - 1;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        width: isLatest ? 34 : 30,
+                        height: isLatest ? 34 : 30,
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: isMine
-                                ? [const Color(0xFF27AE60), const Color(0xFF1A7A3A)]
-                                : [const Color(0xFFFFD700), const Color(0xFFFF8C00)],
-                            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                          shape: BoxShape.circle,
+                          color: isLatest
+                              ? const Color(0xFFFFD700).withAlpha(60)
+                              : Colors.white.withAlpha(15),
+                          border: Border.all(
+                            color: isLatest ? const Color(0xFFFFD700) : Colors.white24,
+                            width: isLatest ? 2 : 1,
                           ),
-                          borderRadius: BorderRadius.circular(4),
-                          boxShadow: isMine
-                              ? [BoxShadow(color: Colors.green.withAlpha(100), blurRadius: 4)]
+                          boxShadow: isLatest
+                              ? [BoxShadow(color: const Color(0xFFFFD700).withAlpha(100), blurRadius: 6)]
                               : [],
                         ),
+                        child: Center(
+                          child: Text(_kFoods[fi].emoji,
+                            style: TextStyle(fontSize: isLatest ? 18 : 15)),
+                        ),
                       ),
-                      if (total > 0)
-                        Text(_fmtNum(total),
-                          style: TextStyle(
-                            color: isMine ? const Color(0xFF27AE60) : const Color(0xFFFFD700),
-                            fontSize: 7, fontWeight: FontWeight.w900)),
-                    ],
-                  ),
+                    );
+                  },
                 ),
-              );
-            }),
-          ),
         ),
       ]),
     );

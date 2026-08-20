@@ -29,10 +29,12 @@ class GsState {
   final DateTime phaseStartAt;
   final int? winnerIndex;
   final List<WinnerInfo> topWinners;
+  final List<int> lastWinners; // food indices of last 20 winners (oldest first)
 
   const GsState({
     required this.phase, required this.roundId,
-    required this.phaseStartAt, required this.winnerIndex, required this.topWinners,
+    required this.phaseStartAt, required this.winnerIndex,
+    required this.topWinners, required this.lastWinners,
   });
 
   factory GsState.fromMap(Map<String, dynamic> d) {
@@ -41,12 +43,15 @@ class GsState {
     if (ts is Timestamp) startAt = ts.toDate();
     final winners = (d['topWinners'] as List<dynamic>?)
         ?.map((w) => WinnerInfo.fromMap(w as Map<String, dynamic>)).toList() ?? [];
+    final lastWinners = (d['lastWinners'] as List<dynamic>?)
+        ?.map((w) => (w as num).toInt()).toList() ?? [];
     return GsState(
       phase: d['phase'] as String? ?? 'betting',
       roundId: (d['roundId'] as num?)?.toInt() ?? 1217,
       phaseStartAt: startAt,
       winnerIndex: (d['winnerIndex'] as num?)?.toInt(),
       topWinners: winners,
+      lastWinners: lastWinners,
     );
   }
 
@@ -245,10 +250,18 @@ class GreedyStarRepository {
         if (!snap.exists) return;
         final d = snap.data() as Map<String, dynamic>;
         if (d['phase'] != 'result' || (d['roundId'] as num).toInt() != roundId) return;
+
+        // Append winner to lastWinners (keep last 20)
+        final winner = (d['winnerIndex'] as num?)?.toInt();
+        final prev = List<dynamic>.from(d['lastWinners'] as List? ?? []);
+        if (winner != null) prev.add(winner);
+        final trimmed = prev.length > 20 ? prev.sublist(prev.length - 20) : prev;
+
         t.update(_game, {
           'phase': 'betting', 'roundId': roundId + 1,
           'phaseStartAt': FieldValue.serverTimestamp(),
           'winnerIndex': null, 'topWinners': [],
+          'lastWinners': trimmed,
         });
         done = true;
       });
