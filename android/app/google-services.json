@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "699687299124",
+    "project_id": "chatbaby-b3570",
+    "storage_bucket": "chatbaby-b3570.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:699687299124:android:ff41dc74a76ad532d9c261",
+        "android_client_info": {
+          "package_name": "com.partyhub.party_hub"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "699687299124-sa7blarhs3l2ekjmib1un3r2csrd0rhc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.partyhub.party_hub",
+            "certificate_hash": "3656c73926a3307d0248894046ea6002f13f7704"
+          }
+        },
+        {
+          "client_id": "699687299124-bg9qfbsteucq0vposgfg2rb1tj348ens.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBGDl62pxkPq32oatANM8ZulqXMzTiW1fQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "699687299124-bg9qfbsteucq0vposgfg2rb1tj348ens.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

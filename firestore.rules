@@ -1,0 +1,188 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── دوال مساعدة ──────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isRoomHost(roomId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/rooms/$(roomId)).data.hostUid == request.auth.uid;
+    }
+
+    // ── المستخدمون ────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId)
+        || (isSignedIn() && request.auth.uid == userId
+            && request.resource.data.keys().hasOnly(['isOnline', 'lastSeen', 'fcmToken']));
+      allow update: if isOwner(userId)
+        || (isSignedIn() && request.auth.uid == userId
+            && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['isOnline', 'lastSeen', 'fcmToken']));
+      allow delete: if false;
+
+      // إشعارات المستخدم
+      match /notifications/{notifId} {
+        allow read: if isOwner(userId);
+        allow create: if isSignedIn();
+        allow update: if isOwner(userId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // ── الغرف ─────────────────────────────────────────────────────
+    match /rooms/{roomId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.hostUid == request.auth.uid;
+      allow update: if isRoomHost(roomId)
+        || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['onlineCount', 'announcement']));
+      allow delete: if isRoomHost(roomId);
+
+      // مقاعد الغرفة
+      match /seats/{seatIndex} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn();
+      }
+
+      // رسائل الغرفة
+      match /room_messages/{msgId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update, delete: if false;
+      }
+
+      // أعضاء الغرفة
+      match /members/{memberId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn()
+          && (request.auth.uid == memberId || isRoomHost(roomId));
+      }
+
+      // هدايا الغرفة (legacy)
+      match /gifts/{giftId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+      }
+    }
+
+    // ── المحادثات الخاصة ──────────────────────────────────────────
+    match /conversations/{convId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.participantIds;
+      allow create: if isSignedIn()
+        && request.auth.uid in request.resource.data.participantIds;
+      allow update: if isSignedIn()
+        && request.auth.uid in resource.data.participantIds;
+      allow delete: if false;
+
+      match /messages/{msgId} {
+        allow read: if isSignedIn()
+          && request.auth.uid in
+            get(/databases/$(database)/documents/conversations/$(convId)).data.participantIds;
+        allow create: if isSignedIn()
+          && request.resource.data.senderId == request.auth.uid
+          && request.auth.uid in
+            get(/databases/$(database)/documents/conversations/$(convId)).data.participantIds;
+        allow update: if isSignedIn()
+          && resource.data.senderId == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['isDeleted', 'content']);
+        allow delete: if false;
+      }
+    }
+
+    // ── الدردشة الجماعية ──────────────────────────────────────────
+    match /groups/{groupId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.memberIds;
+      allow create: if isSignedIn()
+        && request.auth.uid in request.resource.data.memberIds;
+      allow update: if isSignedIn()
+        && (resource.data.adminId == request.auth.uid
+            || request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['lastMessage', 'lastMessageAt', 'unreadCounts']));
+      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid;
+
+      match /messages/{msgId} {
+        allow read: if isSignedIn()
+          && request.auth.uid in
+            get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+        allow create: if isSignedIn()
+          && request.auth.uid in
+            get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+        allow update: if isSignedIn() && resource.data.senderId == request.auth.uid;
+        allow delete: if false;
+      }
+    }
+
+    // ── معاملات المحفظة ───────────────────────────────────────────
+    match /transactions/{txId} {
+      allow read: if isSignedIn()
+        && (resource.data.senderId == request.auth.uid
+            || resource.data.receiverId == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.senderId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ── الأصدقاء ──────────────────────────────────────────────────
+    match /friends/{friendId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid == resource.data.requesterId
+            || request.auth.uid == resource.data.receiverId);
+      allow create: if isSignedIn()
+        && request.auth.uid == request.resource.data.requesterId;
+      allow update: if isSignedIn()
+        && request.auth.uid == resource.data.receiverId;
+      allow delete: if isSignedIn()
+        && (request.auth.uid == resource.data.requesterId
+            || request.auth.uid == resource.data.receiverId);
+    }
+
+    // ── الترتيب ───────────────────────────────────────────────────
+    match /rankings/{rankDoc} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ── التبليغات ─────────────────────────────────────────────────
+    match /reports/{reportId} {
+      allow read: if false;
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // ── الهدايا (catalog) ─────────────────────────────────────────
+    match /gifts/{giftId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ── اشتراكات VIP ──────────────────────────────────────────────
+    match /vip_subscriptions/{subId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // ── المستخدمون المحظورون ──────────────────────────────────────
+    match /blocked_users/{blockId} {
+      allow read: if isSignedIn()
+        && resource.data.blockerId == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.blockerId == request.auth.uid;
+      allow delete: if isSignedIn()
+        && resource.data.blockerId == request.auth.uid;
+      allow update: if false;
+    }
+  }
+}
