@@ -323,7 +323,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
         body: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFFF5A623), Color(0xFFE8921A), Color(0xFFD4800F)],
+              colors: [Color(0xFF321A43), Color(0xFF2B1739), Color(0xFF1A0B22)],
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
             ),
           ),
@@ -380,10 +380,10 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFFFFD700), Color(0xFFFFA500)]),
+                    gradient: const LinearGradient(colors: [Color(0xFFD6A928), Color(0xFFB8860B)]),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Text('قاعدة', style: TextStyle(color: Colors.brown, fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 12)),
+                  child: const Text('قاعدة', style: TextStyle(color: Color(0xFF1A0B22), fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 12)),
                 ),
                 Positioned(top: -3, left: -3,
                   child: Container(width: 7, height: 7, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFFF3B9A)))),
@@ -417,7 +417,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
           margin: const EdgeInsets.fromLTRB(14, 6, 14, 0),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF3A1A00), Color(0xFF5C2E00), Color(0xFF3A1A00)]),
+            gradient: const LinearGradient(colors: [Color(0xFF1A0B24), Color(0xFF2D1440), Color(0xFF1A0B24)]),
             borderRadius: BorderRadius.circular(30),
             border: Border.all(color: const Color(0xFFDAA520), width: 2),
             boxShadow: [BoxShadow(color: Colors.black.withAlpha(80), blurRadius: 10, offset: const Offset(0, 3))],
@@ -496,8 +496,8 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                         : isWinner
                             ? [const Color(0xFFFFFFAA), const Color(0xFFFFD700), const Color(0xFFFF8C00)]
                             : isMyBet
-                                ? [const Color(0xFFFFE8A0), const Color(0xFFFFB300), const Color(0xFFE07000)]
-                                : [const Color(0xFFFFD580), const Color(0xFFFF9500), const Color(0xFFE07000)],
+                                ? [const Color(0xFF8B50B5), const Color(0xFF6B35A0), const Color(0xFF4D2080)]
+                                : [const Color(0xFF7A3EA0), const Color(0xFF5C2880), const Color(0xFF3D1660)],
                     center: const Alignment(-0.3, -0.3), radius: 0.85,
                   ),
                   border: Border.all(
@@ -640,18 +640,18 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       child: Stack(children: [
         const Center(child: Text('⭐', style: TextStyle(fontSize: 52))),
         Positioned(top: 22, left: 22,
-          child: Container(width: 7, height: 3, decoration: BoxDecoration(color: Colors.brown.shade800, borderRadius: BorderRadius.circular(3)))),
+          child: Container(width: 7, height: 3, decoration: BoxDecoration(color: const Color(0xFF3D1A50), borderRadius: BorderRadius.circular(3)))),
         Positioned(top: 21, right: 20,
-          child: Container(width: 6, height: 6, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.brown.shade800))),
+          child: Container(width: 6, height: 6, decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFF3D1A50)))),
         Positioned(top: 22, right: 22,
           child: Container(width: 2, height: 2, decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white))),
         Positioned(bottom: 17, left: 0, right: 0,
           child: Center(child: Container(width: 14, height: 7,
             decoration: BoxDecoration(
               border: Border(
-                bottom: BorderSide(color: Colors.brown.shade700, width: 2.5),
-                left: BorderSide(color: Colors.brown.shade700, width: 2),
-                right: BorderSide(color: Colors.brown.shade700, width: 2),
+                bottom: BorderSide(color: const Color(0xFF4D2060), width: 2.5),
+                left: BorderSide(color: const Color(0xFF4D2060), width: 2),
+                right: BorderSide(color: const Color(0xFF4D2060), width: 2),
               ),
               borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(7), bottomRight: Radius.circular(7)),
             )))),
@@ -702,10 +702,10 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: [Color(0xFF4A2000), Color(0xFF6B3200), Color(0xFF4A2000)]),
+        gradient: LinearGradient(colors: [Color(0xFF1E0B2E), Color(0xFF2D1440), Color(0xFF1E0B2E)]),
         border: Border(
-          top: BorderSide(color: Color(0xFF3A1A00), width: 2),
-          bottom: BorderSide(color: Color(0xFF3A1A00), width: 2),
+          top: BorderSide(color: Color(0xFF1A0B24), width: 2),
+          bottom: BorderSide(color: Color(0xFF1A0B24), width: 2),
         ),
       ),
       child: Column(children: [
@@ -738,14 +738,14 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                     width: isSelected ? 2 : 0,
                   ),
                   boxShadow: isSelected
-                      ? [BoxShadow(color: Colors.amber.withAlpha(140), blurRadius: 10, spreadRadius: 1)]
+                      ? [BoxShadow(color: const Color(0xFFD6A928).withAlpha(140), blurRadius: 10, spreadRadius: 1)]
                       : [],
                 ),
                 child: Text(
                   _fmtNum(amt),
                   style: TextStyle(
                     color: !canBet ? Colors.white24
-                        : isSelected ? Colors.brown.shade900
+                        : isSelected ? const Color(0xFF2B1040)
                         : Colors.white70,
                     fontSize: 11, fontWeight: FontWeight.w900,
                     fontFamily: 'Cairo',
@@ -774,8 +774,8 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       decoration: BoxDecoration(
         color: Colors.black.withAlpha(120),
         border: const Border(
-          top: BorderSide(color: Color(0xFF3A1A00), width: 2),
-          bottom: BorderSide(color: Color(0xFF3A1A00), width: 2),
+          top: BorderSide(color: Color(0xFF1A0B24), width: 2),
+          bottom: BorderSide(color: Color(0xFF1A0B24), width: 2),
         ),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -881,7 +881,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       child: Row(children: [
         Expanded(child: _statBtn('سجلاتي 📋', const Color(0xFF2196F3), Colors.white, onTap: _showRecords)),
         const SizedBox(width: 8),
-        Expanded(child: _statBtn('القواعد 📖', Colors.brown.shade700, Colors.white, onTap: _showRules)),
+        Expanded(child: _statBtn('القواعد 📖', const Color(0xFF4D2060), Colors.white, onTap: _showRules)),
       ]),
     );
   }
@@ -913,7 +913,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
         width: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFD4700A), Color(0xFFE89020), Color(0xFFF5A623)],
+            colors: [Color(0xFF1A0B22), Color(0xFF2B1739), Color(0xFF321A43)],
             begin: Alignment.topCenter, end: Alignment.bottomCenter,
           ),
         ),
@@ -967,7 +967,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                     gradient: LinearGradient(
                       colors: iWon
                           ? [const Color(0xFF27AE60).withAlpha(180), const Color(0xFF1E8449).withAlpha(160)]
-                          : [Colors.brown.withAlpha(120), Colors.brown.withAlpha(80)],
+                          : [const Color(0xFF5C2880).withAlpha(120), const Color(0xFF5C2880).withAlpha(80)],
                     ),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: iWon ? const Color(0xFF27AE60) : const Color(0xFFDAA520).withAlpha(100)),
@@ -1050,11 +1050,25 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
               style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: isFirst ? 12 : 10, fontWeight: FontWeight.bold),
               maxLines: 1, overflow: TextOverflow.ellipsis)),
             const SizedBox(height: 4),
+            // Bet amount
+            if (w.betAmount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: Colors.black.withAlpha(80), borderRadius: BorderRadius.circular(10)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text('راهن: ', style: TextStyle(color: Colors.white54, fontSize: isFirst ? 9 : 8, fontFamily: 'Cairo')),
+                  Text(_fmtNum(w.betAmount), style: TextStyle(color: Colors.white70, fontSize: isFirst ? 9 : 8, fontWeight: FontWeight.w700)),
+                  const Text(' 🪙', style: TextStyle(fontSize: 9)),
+                ]),
+              ),
+            const SizedBox(height: 2),
+            // Win amount
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(color: Colors.black.withAlpha(100), borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: rcOrder[i].withAlpha(150))),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text('ربح: ', style: TextStyle(color: rcOrder[i].withAlpha(180), fontSize: isFirst ? 10 : 9, fontFamily: 'Cairo')),
                 Text(_fmtNum(w.amount), style: TextStyle(color: rcOrder[i], fontSize: isFirst ? 12 : 10, fontWeight: FontWeight.w900)),
                 const SizedBox(width: 2),
                 const Text('🪙', style: TextStyle(fontSize: 11)),
@@ -1092,7 +1106,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       builder: (_) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF3A1A00),
+          backgroundColor: const Color(0xFF1A0B24),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFFDAA520), width: 2)),
           title: const Text('قواعد اللعبة', style: TextStyle(color: Color(0xFFFFD700), fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 18), textAlign: TextAlign.center),
           content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1116,7 +1130,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                   Expanded(child: Text(f.name, style: const TextStyle(color: Colors.white70, fontFamily: 'Cairo', fontSize: 12))),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: f.hot ? const Color(0xFFFF3B30) : const Color(0xFFE07000).withAlpha(120), borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(color: f.hot ? const Color(0xFFFF3B30) : const Color(0xFF5C2880).withAlpha(120), borderRadius: BorderRadius.circular(8)),
                     child: Text('${f.mult}×', style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 12)),
                   ),
                 ]),
@@ -1129,7 +1143,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 8)),
               onPressed: () => Navigator.pop(context),
-              child: const Text('فهمت! ✅', style: TextStyle(color: Colors.brown, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 15)),
+              child: const Text('فهمت! ✅', style: TextStyle(color: Color(0xFF1A0B22), fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 15)),
             )),
           ],
         ),
@@ -1141,7 +1155,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     padding: const EdgeInsets.symmetric(vertical: 3),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Container(width: 20, height: 20, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFFFD700)),
-        child: Center(child: Text(n, style: const TextStyle(color: Colors.brown, fontSize: 11, fontWeight: FontWeight.w900)))),
+        child: Center(child: Text(n, style: const TextStyle(color: Color(0xFF1A0B22), fontSize: 11, fontWeight: FontWeight.w900)))),
       const SizedBox(width: 8),
       Expanded(child: Text(text, style: const TextStyle(color: Colors.white70, fontFamily: 'Cairo', fontSize: 12))),
     ]),
@@ -1150,7 +1164,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   void _showRecords() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF3A1A00),
+      backgroundColor: const Color(0xFF1A0B24),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20)), side: BorderSide(color: Color(0xFFDAA520), width: 2)),
       isScrollControlled: true,
       builder: (_) => Directionality(
@@ -1251,13 +1265,41 @@ class _DotPattern extends StatelessWidget {
 class _DotPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final p = Paint()..color = Colors.white.withAlpha(18)..style = PaintingStyle.fill;
-    for (double x = 0; x < size.width; x += 22) {
-      for (double y = 0; y < size.height; y += 22) {
-        canvas.drawCircle(Offset(x, y), 2, p);
+    final linePaint = Paint()
+      ..color = const Color(0xFFD6A928).withAlpha(22)
+      ..strokeWidth = 0.8
+      ..style = PaintingStyle.stroke;
+    final dotPaint = Paint()
+      ..color = const Color(0xFFD6A928).withAlpha(30)
+      ..style = PaintingStyle.fill;
+
+    const step = 40.0;
+    for (double cx = 0; cx < size.width + step; cx += step) {
+      for (double cy = 0; cy < size.height + step; cy += step) {
+        // 8-pointed star outline (Islamic geometric motif)
+        final path = Path();
+        const r1 = 9.0, r2 = 5.0;
+        for (int i = 0; i < 8; i++) {
+          final a1 = (i * 2 * pi / 8) - pi / 2;
+          final a2 = a1 + pi / 8;
+          final x1 = cx + r1 * cos(a1);
+          final y1 = cy + r1 * sin(a1);
+          final x2 = cx + r2 * cos(a2);
+          final y2 = cy + r2 * sin(a2);
+          if (i == 0) {
+            path.moveTo(x1, y1);
+          } else {
+            path.lineTo(x1, y1);
+          }
+          path.lineTo(x2, y2);
+        }
+        path.close();
+        canvas.drawPath(path, linePaint);
+        canvas.drawCircle(Offset(cx, cy), 1.2, dotPaint);
       }
     }
   }
+
   @override
   bool shouldRepaint(covariant CustomPainter old) => false;
 }
@@ -1272,7 +1314,7 @@ class _WheelPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.drawCircle(Offset(cx, cy), r + 45,
       Paint()..shader = const RadialGradient(
-        colors: [Color(0xFFFFD580), Color(0xFFF5A623), Color(0xFFE07000)], radius: 0.8,
+        colors: [Color(0xFF5C2880), Color(0xFF421D52), Color(0xFF1A0B24)], radius: 0.8,
       ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: r + 45)));
 
     canvas.drawCircle(Offset(cx, cy), r + 36,
@@ -1281,8 +1323,8 @@ class _WheelPainter extends CustomPainter {
     final innerRing = Paint()..color = const Color(0xFFB8860B)..style = PaintingStyle.stroke..strokeWidth = 3.5;
     canvas.drawCircle(Offset(cx, cy), 50, innerRing);
 
-    final spoke = Paint()..color = const Color(0xFF8B5E00)..strokeWidth = 7..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
-    final spokeL = Paint()..color = const Color(0xFFD4A017)..strokeWidth = 2..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
+    final spoke = Paint()..color = const Color(0xFF351743)..strokeWidth = 7..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
+    final spokeL = Paint()..color = const Color(0xFFD6A928)..strokeWidth = 2..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
     for (int i = 0; i < 8; i++) {
       final a = -pi / 2 + i * pi / 4;
       final sx = cx + 52 * cos(a); final sy = cy + 52 * sin(a);
@@ -1292,11 +1334,11 @@ class _WheelPainter extends CustomPainter {
     }
 
     canvas.drawCircle(Offset(cx, cy), 48,
-      Paint()..shader = const RadialGradient(colors: [Color(0xFF8B5E00), Color(0xFF5C3A00)])
+      Paint()..shader = const RadialGradient(colors: [Color(0xFF351743), Color(0xFF1A0B24)])
           .createShader(Rect.fromCircle(center: Offset(cx, cy), radius: 50)));
     canvas.drawCircle(Offset(cx, cy), 48, innerRing);
 
-    final leg = Paint()..color = const Color(0xFF6B4200)..strokeWidth = 8..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
+    final leg = Paint()..color = const Color(0xFF2D1440)..strokeWidth = 8..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
     canvas.drawLine(Offset(cx, cy + r + 30), Offset(cx - 40, size.height - 10), leg);
     canvas.drawLine(Offset(cx, cy + r + 30), Offset(cx + 40, size.height - 10), leg);
     canvas.drawLine(Offset(cx - 50, size.height - 10), Offset(cx + 50, size.height - 10), leg);

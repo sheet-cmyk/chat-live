@@ -8,18 +8,24 @@ import '../../../wallet/data/repositories/wallet_repository.dart';
 class WinnerInfo {
   final String userId, userName;
   final String? avatar;
-  final int amount;
-  const WinnerInfo({required this.userId, required this.userName, this.avatar, required this.amount});
+  final int amount;    // win amount (bet × multiplier)
+  final int betAmount; // original bet on winning food
+  const WinnerInfo({
+    required this.userId, required this.userName, this.avatar,
+    required this.amount, this.betAmount = 0,
+  });
 
   factory WinnerInfo.fromMap(Map<String, dynamic> m) => WinnerInfo(
     userId: m['userId'] as String? ?? '',
     userName: m['userName'] as String? ?? 'مجهول',
     avatar: m['avatar'] as String?,
     amount: (m['amount'] as num?)?.toInt() ?? 0,
+    betAmount: (m['betAmount'] as num?)?.toInt() ?? 0,
   );
 
   Map<String, dynamic> toMap() => {
-    'userId': userId, 'userName': userName, 'avatar': avatar, 'amount': amount,
+    'userId': userId, 'userName': userName, 'avatar': avatar,
+    'amount': amount, 'betAmount': betAmount,
   };
 }
 
@@ -142,6 +148,24 @@ class GreedyStarRepository {
   final _db = FirebaseFirestore.instance;
   final _wallet = WalletRepository();
 
+  // Cached current user profile — fetched once per session
+  String? _cachedUserName;
+  String? _cachedUserAvatar;
+  bool _profileFetched = false;
+
+  Future<void> _ensureProfile() async {
+    if (_profileFetched) return;
+    _profileFetched = true;
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final snap = await _db.collection('users').doc(uid).get();
+      final d = snap.data();
+      _cachedUserName = d?['displayName'] as String?;
+      _cachedUserAvatar = d?['avatar'] as String?;
+    } catch (_) {}
+  }
+
   DocumentReference get _game => _db.doc('games/greedy_star');
   CollectionReference _bets(int roundId) =>
       _game.collection('rounds').doc('$roundId').collection('bets');
@@ -203,6 +227,7 @@ class GreedyStarRepository {
 
   Future<bool> tryTransitionToResult(int roundId, int winnerIndex) async {
     // Compute top winners from multi-item bets
+    // Name/avatar are read from the bet doc itself (written during tapBet)
     List<Map<String, dynamic>> top = [];
     try {
       final betsSnap = await _bets(roundId).get();
@@ -210,15 +235,15 @@ class GreedyStarRepository {
       for (final doc in betsSnap.docs) {
         final data = doc.data() as Map<String, dynamic>;
         final bet = MyBet.fromMap(data);
-        final winAmt = bet.amountFor(winnerIndex) * mult;
-        if (winAmt <= 0) continue;
-        final userSnap = await _db.collection('users').doc(doc.id).get();
-        final ud = userSnap.data();
+        final betAmt = bet.amountFor(winnerIndex);
+        if (betAmt <= 0) continue;
+        final winAmt = betAmt * mult;
         top.add({
           'userId': doc.id,
-          'userName': ud?['name'] ?? ud?['username'] ?? 'مجهول',
-          'avatar': ud?['avatar'],
+          'userName': data['userName'] as String? ?? 'مجهول',
+          'avatar': data['userAvatar'] as String?,
           'amount': winAmt,
+          'betAmount': betAmt,
         });
       }
       top.sort((a, b) => (b['amount'] as int).compareTo(a['amount'] as int));
@@ -323,16 +348,22 @@ class GreedyStarRepository {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return 'يجب تسجيل الدخول';
 
+    await _ensureProfile(); // fetch name/avatar once per session
+
     final ok = await _wallet.deductCoins(uid, amount, 'رهان Greedy Star جولة $roundId');
     if (!ok) return 'رصيدك غير كافٍ';
 
     try {
-      await _bets(roundId).doc(uid).set({
+      final data = <String, dynamic>{
         'f$foodIndex': FieldValue.increment(amount),
         'totalAmount': FieldValue.increment(amount),
         'paid': false,
         'placedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+        // Store name/avatar so tryTransitionToResult can read without cross-user lookup
+        if (_cachedUserName != null) 'userName': _cachedUserName,
+        if (_cachedUserAvatar != null) 'userAvatar': _cachedUserAvatar,
+      };
+      await _bets(roundId).doc(uid).set(data, SetOptions(merge: true));
       return null;
     } catch (e) {
       await _wallet.addCoins(uid, amount, 'استرداد رهان Greedy Star جولة $roundId');
