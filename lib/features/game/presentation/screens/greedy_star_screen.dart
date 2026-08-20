@@ -561,27 +561,31 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                     blurRadius: glowR + 4, spreadRadius: isHighlighted ? 3 : 0,
                   )],
                 ),
-                child: Center(child: Text(food.emoji, style: TextStyle(fontSize: bSize * 0.48))),
-              ),
-              // Bet amount badge (draft or confirmed)
-              if ((inDraft && draftAmt > 0) || (isMyBet && myBetAmt > 0))
-                Positioned(
-                  bottom: -2, left: 0, right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: isMyBet ? const Color(0xFF27AE60) : const Color(0xFFE07000),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white, width: 1),
-                      ),
-                      child: Text(
-                        _fmtNum(isMyBet ? myBetAmt : draftAmt),
-                        style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900),
+                child: Stack(children: [
+                  // Emoji — shifted up slightly to leave room for multiplier
+                  Align(
+                    alignment: const Alignment(0, -0.30),
+                    child: Text(food.emoji, style: TextStyle(fontSize: bSize * 0.43)),
+                  ),
+                  // Multiplier INSIDE the circle at the bottom — bold & clear
+                  Positioned(
+                    bottom: 6, left: 0, right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withAlpha(160),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text('×${food.mult}',
+                          style: const TextStyle(color: Colors.white, fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            shadows: [Shadow(color: Colors.black, blurRadius: 2)])),
                       ),
                     ),
                   ),
-                ),
+                ]),
+              ),
               // Betters count
               if (betterCount > 0)
                 Positioned(top: -5, right: -5,
@@ -601,14 +605,25 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                       child: const Text('HOT', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900)),
                     ))),
             ]),
-            const SizedBox(height: 2),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(color: Colors.black.withAlpha(50), borderRadius: BorderRadius.circular(6)),
-              child: Text('${food.mult}×',
-                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, fontFamily: 'Cairo',
-                  color: isHighlighted ? Colors.white : Colors.white.withAlpha(220))),
-            ),
+            // Amount below circle — full number (e.g. 10,500) when bet is set
+            if ((inDraft && draftAmt > 0) || (isMyBet && myBetAmt > 0))
+              Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isMyBet ? const Color(0xFF1A6B38) : const Color(0xFF7A3A00),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white, width: 1),
+                  ),
+                  child: Text(
+                    _fmtFull(isMyBet ? myBetAmt : draftAmt),
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900),
+                  ),
+                ),
+              )
+            else
+              const SizedBox(height: 3),
           ]),
         );
       },
@@ -1319,6 +1334,13 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}م';
     if (v >= 1000) return '${(v / 1000).toStringAsFixed(v % 1000 == 0 ? 0 : 1)}ك';
     return '$v';
+  }
+
+  // Full number with commas — shown below food bubble (e.g. 10,500)
+  String _fmtFull(int v) {
+    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(v % 1000000 == 0 ? 0 : 1)}م';
+    return v.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
   }
 
   // Full number with commas for balance display
