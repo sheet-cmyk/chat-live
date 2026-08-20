@@ -919,7 +919,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       child: SlideTransition(
         position: _resultSlide,
         child: Container(
-          height: MediaQuery.of(context).size.height * 0.64,
+          height: MediaQuery.of(context).size.height * 0.66,
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [Color(0xFF321A43), Color(0xFF2B1739), Color(0xFF1A0B22)],
@@ -934,7 +934,8 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
             boxShadow: [BoxShadow(color: Colors.black.withAlpha(180), blurRadius: 30, spreadRadius: 4, offset: const Offset(0, -4))],
           ),
           child: Column(children: [
-            // Handle + timer row
+
+            // ── شريط علوي: عداد + جولة ───────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
               child: Row(children: [
@@ -956,87 +957,96 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                 ),
               ]),
             ),
-            const SizedBox(height: 8),
-            // ── Food header ───────────────────────────────────
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 14),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.black.withAlpha(60),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFD6A928).withAlpha(100)),
+
+            // ── الطعام الفائز في الوسط ────────────────────────
+            const SizedBox(height: 6),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Text('🎉', style: TextStyle(fontSize: 22)),
+              const SizedBox(width: 8),
+              AnimatedBuilder(
+                animation: _starY,
+                builder: (_, child) => Transform.translate(offset: Offset(0, _starY.value), child: child),
+                child: Text(food.emoji, style: const TextStyle(fontSize: 58)),
               ),
-              child: Row(children: [
-                AnimatedBuilder(
-                  animation: _starY,
-                  builder: (_, child) => Transform.translate(offset: Offset(0, _starY.value), child: child),
-                  child: Text(food.emoji, style: const TextStyle(fontSize: 48)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(food.name, style: const TextStyle(
-                    color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 22,
-                    shadows: [Shadow(color: Colors.black54, blurRadius: 4)])),
-                  Text('${food.mult}× المضاعف', style: const TextStyle(
-                    color: Color(0xFFFFD700), fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 14)),
-                ])),
-                // decorative confetti
-                const Text('🎉', style: TextStyle(fontSize: 26)),
-              ]),
-            ),
+              const SizedBox(width: 8),
+              const Text('🎉', style: TextStyle(fontSize: 22)),
+            ]),
+            Text(food.name, textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 20,
+                shadows: [Shadow(color: Colors.black54, blurRadius: 4)])),
+            Text('${food.mult}× المضاعف', textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFFFFD700), fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 13)),
+
+            // ── نتيجة المستخدم ────────────────────────────────
             const SizedBox(height: 8),
-            // ── Stats: فاز / راهن ─────────────────────────────
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 14),
+              margin: const EdgeInsets.symmetric(horizontal: 16),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.black.withAlpha(50),
+                color: iWon ? const Color(0xFF27AE60).withAlpha(90) : const Color(0xFF5C2880).withAlpha(80),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFD6A928).withAlpha(70)),
+                border: Border.all(color: iWon ? const Color(0xFF27AE60).withAlpha(180) : const Color(0xFFDAA520).withAlpha(80)),
               ),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text(iWon ? '🏆' : (_myBet != null ? '😔' : '👀'), style: const TextStyle(fontSize: 22)),
+                const SizedBox(width: 8),
+                Text(
+                  iWon
+                    ? 'فزت! +${_fmtNum(_myWinAmount)} 🪙'
+                    : (_myBet != null
+                        ? 'خسرت ${_fmtNum(_myBet!.amountFor(winner))} 🪙'
+                        : 'لم تراهن'),
+                  style: TextStyle(
+                    color: iWon ? const Color(0xFFFFD700) : Colors.white70,
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 15),
+                ),
+              ]),
+            ),
+
+            // ── فاز / راهن (مبالغ المستخدم) ──────────────────
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
                 Column(children: [
-                  Text('$numWon', style: const TextStyle(color: Color(0xFFFFD700), fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 24)),
-                  const Text('فاز', style: TextStyle(color: Colors.white60, fontFamily: 'Cairo', fontSize: 13)),
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(_fmtNum(_myBet?.totalAmount ?? 0),
+                      style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 20)),
+                    const Text(' 🪙', style: TextStyle(fontSize: 14)),
+                  ]),
+                  const Text('راهن', style: TextStyle(color: Colors.white54, fontFamily: 'Cairo', fontSize: 11)),
                 ]),
-                Container(width: 1, height: 38, color: const Color(0xFFD6A928).withAlpha(70)),
+                Container(width: 1, height: 32, color: const Color(0xFFD6A928).withAlpha(60)),
                 Column(children: [
-                  Text('$numBet', style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 24)),
-                  const Text('راهن', style: TextStyle(color: Colors.white60, fontFamily: 'Cairo', fontSize: 13)),
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(iWon ? _fmtNum(_myWinAmount) : '0',
+                      style: TextStyle(color: iWon ? const Color(0xFFFFD700) : Colors.white38, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 20)),
+                    const Text(' 🪙', style: TextStyle(fontSize: 14)),
+                  ]),
+                  const Text('فاز', style: TextStyle(color: Colors.white54, fontFamily: 'Cairo', fontSize: 11)),
                 ]),
               ]),
             ),
+
+            // ── فاصل ─────────────────────────────────────────
             const SizedBox(height: 6),
-            // ── My result (compact) ───────────────────────────
-            if (_myBet != null || iWon)
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 14),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: iWon ? const Color(0xFF27AE60).withAlpha(90) : const Color(0xFF5C2880).withAlpha(80),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: iWon ? const Color(0xFF27AE60).withAlpha(180) : const Color(0xFFDAA520).withAlpha(80)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(children: [
+                Expanded(child: Container(height: 1, color: const Color(0xFFD6A928).withAlpha(50))),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text('أكبر الفائزين 🏆',
+                    style: TextStyle(color: Colors.white.withAlpha(160), fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
-                child: Row(children: [
-                  Text(iWon ? '🏆' : '😔', style: const TextStyle(fontSize: 22)),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(
-                    iWon
-                      ? 'فزت! +${_fmtNum(_myWinAmount)} 🪙 أضيفت لرصيدك'
-                      : (_myBet != null
-                          ? 'خسرت ${_fmtNum(_myBet!.amountFor(winner))} 🪙 على ${food.name}'
-                          : 'لم تراهن في هذه الجولة'),
-                    style: TextStyle(
-                      color: iWon ? const Color(0xFFFFD700) : Colors.white70,
-                      fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 13),
-                  )),
-                ]),
-              ),
-            const SizedBox(height: 8),
-            // ── Top 3 podium ──────────────────────────────────
+                Expanded(child: Container(height: 1, color: const Color(0xFFD6A928).withAlpha(50))),
+              ]),
+            ),
+
+            // ── منصة الفائزين الثلاثة ─────────────────────────
             if (state.topWinners.isNotEmpty)
               Expanded(child: Center(child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 child: _buildPodium(state.topWinners),
               )))
             else
