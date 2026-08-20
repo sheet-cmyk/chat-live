@@ -25,6 +25,7 @@ import '../../data/repositories/room_state_repository.dart';
 import '../widgets/user_profile_sheet.dart';
 import '../widgets/room_announcement_banner.dart';
 import '../widgets/sound_effects_panel.dart';
+import '../../../admin/presentation/providers/admin_provider.dart';
 
 class RoomScreen extends ConsumerStatefulWidget {
   const RoomScreen({super.key, required this.room});
@@ -40,7 +41,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   late final String _roomId;
   bool _leftCleanly = false;
   String _announcement = '';
-  // gift animation: only show gifts that arrive after we opened this screen
   late final DateTime _joinedAt;
   String? _lastGiftMsgId;
 
@@ -114,12 +114,32 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         userName: me.displayName ?? 'مستخدم',
       );
 
-      // المضيف في مقعد 0 من البداية — افتح ميكه تلقائياً
+      // Zego starts with mic muted — sync provider state to match reality.
       if (isHost) {
+        // Host auto-unmutes on seat 0.
         await zego.setMicMuted(false);
+        ref.read(isMicMutedProvider.notifier).state = false;
+      } else {
+        // Non-host: mic stays muted until they take a seat.
+        ref.read(isMicMutedProvider.notifier).state = true;
       }
 
       await zego.startSoundLevelMonitor();
+
+    // استمع لقرار الطرد من الغرفة
+    RoomStateRepository().watchRoomKick(_roomId, me.uid).listen((kicked) {
+      if (kicked && mounted) {
+        _leftCleanly = false;
+        _cleanup();
+        if (mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('🚫 تم طردك من الغرفة', style: TextStyle(fontFamily: 'Cairo')),
+            backgroundColor: Colors.red,
+          ));
+        }
+      }
+    });
     }
 
     // سجّل الـ callbacks في كل مرة (بما فيها الاستعادة من التصغير)
@@ -134,7 +154,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         orElse: () => const SeatModel(index: -1),
       );
       if (seat.index >= 0) {
-        await ref.read(seatsWriterProvider(_roomId)).leaveSeat(seat.index);
+        // Only clear if still owned by that user (prevents race with re-join).
+        await ref.read(seatsWriterProvider(_roomId)).leaveSeatIfOwner(seat.index, userId);
         if (seat.index == ref.read(myCurrentSeatProvider)) {
           ref.read(myCurrentSeatProvider.notifier).state = -1;
         }
@@ -170,11 +191,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   @override
   void dispose() {
     _scrollCtrl.dispose();
-    _cleanup();
+    // Read seat index BEFORE super.dispose() invalidates ref.
+    final savedSeat = ref.read(myCurrentSeatProvider);
+    _cleanup(savedSeat: savedSeat);
     super.dispose();
   }
 
-  Future<void> _cleanup() async {
+  Future<void> _cleanup({int savedSeat = -1}) async {
     if (_leftCleanly) return;
     _leftCleanly = true;
 
@@ -188,15 +211,20 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
     if (me == null) return;
 
-    // أفرغ مقعدنا من Firestore
-    final mySeat = ref.read(myCurrentSeatProvider);
-    if (mySeat >= 0) {
-      await ref.read(seatsWriterProvider(_roomId)).leaveSeat(mySeat);
+    // Clear our seat only if we still own it (guards against re-entry race).
+    if (savedSeat >= 0) {
+      await RoomStateRepository().leaveSeatIfOwner(_roomId, savedSeat, me.uid);
     }
 
     // رسالة مغادرة
-    await ref.read(chatWriterProvider(_roomId)).sendSystem(
-      '${me.displayName ?? 'مستخدم'} غادر الغرفة',
+    await RoomStateRepository().sendMessage(
+      _roomId,
+      RoomMessageModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        content: '${me.displayName ?? 'مستخدم'} غادر الغرفة',
+        type: MessageType.system,
+        createdAt: DateTime.now(),
+      ),
     );
 
     // حذف من members + تنقيص العداد
@@ -229,7 +257,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
     // اترك المقعد القديم أولاً
     if (mySeat >= 0) {
-      ref.read(seatsWriterProvider(_roomId)).leaveSeat(mySeat);
+      ref.read(seatsWriterProvider(_roomId)).leaveSeatIfOwner(mySeat, me.uid);
     }
 
     ref.read(seatsWriterProvider(_roomId)).takeSeat(
@@ -239,49 +267,71 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       userAvatar: me.photoURL,
     );
     ref.read(myCurrentSeatProvider.notifier).state = seat.index;
-    // فتح الميكروفون عند الصعود للمقعد
+    // فتح الميكروفون عند الصعود للمقعد وتحديث الزر فوراً
     ZegoService().setMicMuted(false);
+    ref.read(isMicMutedProvider.notifier).state = false;
   }
 
   void _doLeaveSeat(int index) {
-    ref.read(seatsWriterProvider(_roomId)).leaveSeat(index);
+    final me = _currentUser;
+    if (me != null) {
+      ref.read(seatsWriterProvider(_roomId)).leaveSeatIfOwner(index, me.uid);
+    } else {
+      ref.read(seatsWriterProvider(_roomId)).leaveSeat(index);
+    }
     ref.read(myCurrentSeatProvider.notifier).state = -1;
-    // كتم الميكروفون عند النزول من المقعد
+    // كتم الميكروفون عند النزول من المقعد وتحديث الزر فوراً
     ZegoService().setMicMuted(true);
+    ref.read(isMicMutedProvider.notifier).state = true;
   }
 
   void _showUserProfile(SeatModel seat) {
+    final isAdmin = ref.read(isAdminProvider).valueOrNull == true;
+    final isHost = ref.read(isHostProvider);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => UserProfileSheet(seat: seat),
+      builder: (_) => UserProfileSheet(
+        roomId: _roomId,
+        targetUserId: seat.userId ?? '',
+        targetUserName: seat.userName ?? 'مستخدم',
+        targetUserAvatar: seat.userAvatar,
+        seatIndex: seat.index,
+        isSeatMuted: seat.isMuted,
+        isAdmin: isAdmin,
+        isHost: isHost,
+      ),
+    );
+  }
+
+  void _showUserProfileFromChat(String userId, String userName, String? avatar) {
+    if (userId == (_currentUser?.uid ?? '')) return; // لا تُظهر قائمة لنفسك
+    final isAdmin = ref.read(isAdminProvider).valueOrNull == true;
+    final isHost = ref.read(isHostProvider);
+    // ابحث عن مقعده إن وجد
+    final seats = ref.read(seatsProvider(_roomId));
+    final seat = seats.firstWhere((s) => s.userId == userId, orElse: () => const SeatModel(index: -1));
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => UserProfileSheet(
+        roomId: _roomId,
+        targetUserId: userId,
+        targetUserName: userName,
+        targetUserAvatar: avatar,
+        seatIndex: seat.index >= 0 ? seat.index : null,
+        isSeatMuted: seat.index >= 0 ? seat.isMuted : false,
+        isAdmin: isAdmin,
+        isHost: isHost,
+      ),
     );
   }
 
   void _showHostSeatMenu(SeatModel seat) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _HostSeatMenu(
-        seat: seat,
-        onMute: () {
-          ref.read(seatsWriterProvider(_roomId)).toggleMute(seat.index, seat.isMuted);
-          Navigator.pop(context);
-        },
-        onLock: () {
-          ref.read(seatsWriterProvider(_roomId)).toggleLock(seat.index, seat.isLocked);
-          Navigator.pop(context);
-        },
-        onKick: () {
-          ref.read(seatsWriterProvider(_roomId)).kickFromSeat(seat.index);
-          Navigator.pop(context);
-        },
-      ),
-    );
+    // استخدم UserProfileSheet الموحّد للمضيف أيضاً
+    _showUserProfile(seat);
   }
 
   void _sendMessage(String text) {
@@ -343,6 +393,33 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     final messagesAsync = ref.watch(roomChatStreamProvider(_roomId));
     final messages = messagesAsync.valueOrNull ?? [];
     final isHost = ref.watch(isHostProvider);
+
+    // ── مزامنة حالة المقعد من Firestore إلى Zego ──────────────────
+    // Handles: host muting a user, and detecting when kicked from seat.
+    ref.listen<List<SeatModel>>(seatsProvider(_roomId), (_, seats) {
+      final mySeat = ref.read(myCurrentSeatProvider);
+      if (mySeat < 0 || mySeat >= seats.length) return;
+      final mySeatData = seats[mySeat];
+      final uid = _currentUser?.uid;
+      if (uid == null) return;
+
+      if (mySeatData.isEmpty || mySeatData.userId != uid) {
+        // Kicked by host — reset local state and mute mic.
+        ref.read(myCurrentSeatProvider.notifier).state = -1;
+        if (!ref.read(isMicMutedProvider)) {
+          ref.read(isMicMutedProvider.notifier).state = true;
+          ZegoService().setMicMuted(true);
+        }
+        return;
+      }
+
+      // Sync host's mute toggle from Firestore to actual Zego mic.
+      final firestoreMuted = mySeatData.isMuted;
+      if (firestoreMuted != ref.read(isMicMutedProvider)) {
+        ref.read(isMicMutedProvider.notifier).state = firestoreMuted;
+        ZegoService().setMicMuted(firestoreMuted);
+      }
+    });
 
     // مرر للأسفل عند وصول رسائل جديدة + كشف هدايا جديدة للأنيميشن
     ref.listen(roomChatStreamProvider(_roomId), (_, next) {
@@ -446,6 +523,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                   child: RoomChatMessages(
                     messages: messages,
                     scrollController: _scrollCtrl,
+                    onUserTap: _showUserProfileFromChat,
                   ),
                 ),
 
@@ -455,6 +533,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                   onSettings: () => _showSettings(context),
                   onSoundEffects: _showSoundEffects,
                   isHost: isHost,
+                  roomId: _roomId,
+                  currentUserId: _currentUser?.uid ?? '',
                 ),
               ],
             ),
@@ -546,7 +626,7 @@ class _RoomHeader extends StatelessWidget {
         child: Row(
           children: [
             GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
+              onTap: onMinimize,
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -614,50 +694,7 @@ class _HeaderBtn extends StatelessWidget {
   }
 }
 
-// ── قائمة المضيف ────────────────────────────────────────────────────
-class _HostSeatMenu extends StatelessWidget {
-  const _HostSeatMenu({
-    required this.seat, required this.onMute,
-    required this.onLock, required this.onKick,
-  });
-  final SeatModel seat;
-  final VoidCallback onMute, onLock, onKick;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(width: 40, height: 4,
-              decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 16),
-          Text(seat.userName ?? 'مستخدم',
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700, fontFamily: 'Cairo')),
-          const SizedBox(height: 16),
-          _MenuTile(
-            icon: seat.isMuted ? Icons.mic_rounded : Icons.mic_off_rounded,
-            label: seat.isMuted ? 'رفع الكتم' : 'كتم الصوت',
-            color: AppColors.warning, onTap: onMute,
-          ),
-          _MenuTile(
-            icon: seat.isLocked ? Icons.lock_open_rounded : Icons.lock_rounded,
-            label: seat.isLocked ? 'فتح المقعد' : 'قفل المقعد',
-            color: AppColors.textSecondary, onTap: onLock,
-          ),
-          _MenuTile(
-            icon: Icons.person_remove_rounded,
-            label: 'طرد من المقعد',
-            color: AppColors.error, onTap: onKick,
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-}
-
+// ── عنصر قائمة مشترك ────────────────────────────────────────────────
 class _MenuTile extends StatelessWidget {
   const _MenuTile({required this.icon, required this.label, required this.color, required this.onTap});
   final IconData icon;

@@ -68,6 +68,27 @@ class RoomStateRepository {
     });
   }
 
+  // Clears the seat only if it is still owned by [userId] — prevents race conditions.
+  Future<void> leaveSeatIfOwner(
+      String roomId, int index, String userId) async {
+    final ref = _seats(roomId).doc('$index');
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) return;
+      final current = (snap.data() as Map<String, dynamic>?)?['userId'];
+      if (current != userId) return;
+      tx.set(ref, {
+        'userId': null,
+        'userName': null,
+        'userAvatar': null,
+        'isMuted': false,
+        'isLocked': false,
+        'userLevel': 1,
+        'userVip': 0,
+      });
+    });
+  }
+
   Future<void> setSeatMuted(String roomId, int index, bool muted) async {
     await _seats(roomId).doc('$index').update({'isMuted': muted});
   }
@@ -144,5 +165,34 @@ class RoomStateRepository {
       {'onlineCount': FieldValue.increment(-1)},
     );
     await batch.commit();
+  }
+
+  // ── كتم الدردشة ──────────────────────────────────────────────────
+  CollectionReference _chatMuted(String roomId) =>
+      _db.collection('rooms').doc(roomId).collection('chat_muted');
+
+  Future<void> muteChatUser(String roomId, String userId, bool mute) async {
+    final ref = _chatMuted(roomId).doc(userId);
+    if (mute) {
+      await ref.set({'mutedAt': FieldValue.serverTimestamp()});
+    } else {
+      await ref.delete();
+    }
+  }
+
+  Stream<bool> isChatMutedStream(String roomId, String userId) {
+    return _chatMuted(roomId).doc(userId).snapshots().map((s) => s.exists);
+  }
+
+  // ── طرد من الغرفة ─────────────────────────────────────────────────
+  CollectionReference _kicks(String roomId) =>
+      _db.collection('rooms').doc(roomId).collection('room_kicks');
+
+  Future<void> kickFromRoom(String roomId, String userId) async {
+    await _kicks(roomId).doc(userId).set({'kickedAt': FieldValue.serverTimestamp()});
+  }
+
+  Stream<bool> watchRoomKick(String roomId, String userId) {
+    return _kicks(roomId).doc(userId).snapshots().map((s) => s.exists);
   }
 }

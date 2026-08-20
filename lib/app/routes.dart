@@ -21,6 +21,10 @@ import '../features/wallet/presentation/screens/daily_reward_screen.dart';
 import '../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../features/home/presentation/screens/room_history_screen.dart';
 import '../features/wallet/data/repositories/wallet_repository.dart';
+import '../features/sweet_bonanza/screens/sb_entry_screen.dart';
+import '../features/admin/presentation/screens/admin_screen.dart';
+import '../features/admin/data/repositories/admin_repository.dart';
+import '../features/game/presentation/screens/greedy_star_screen.dart';
 
 // عدد العملات اليومية المستلمة — يُعرض كإشعار في الصفحة الرئيسية
 final pendingDailyCoinsProvider = StateProvider<int>((_) => 0);
@@ -41,7 +45,10 @@ class AppRoutes {
   static const String gift = '/gift';
   static const String vip = '/vip';
   static const String game = '/game';
+  static const String sweetBonanza = '/sweet-bonanza';
   static const String notification = '/notification';
+  static const String admin = '/admin';
+  static const String greedyStar = '/greedy-star';
 }
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -159,6 +166,18 @@ final GoRouter appRouter = GoRouter(
       path: '/room-history',
       builder: (context, state) => const RoomHistoryScreen(),
     ),
+    GoRoute(
+      path: AppRoutes.sweetBonanza,
+      builder: (context, state) => const SbEntryScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.admin,
+      builder: (context, state) => const AdminScreen(),
+    ),
+    GoRoute(
+      path: AppRoutes.greedyStar,
+      builder: (context, state) => const GreedyStarScreen(),
+    ),
   ],
 );
 
@@ -190,6 +209,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     if (!mounted) return;
 
     if (user != null) {
+      // Bootstrap admin privileges for seed email (safe no-op for others)
+      AdminRepository().bootstrapIfNeeded(user);
       final wallet = WalletRepository();
       // هدية الترحيب للمستخدمين القدامى (تُعطى مرة واحدة فقط)
       wallet.ensureWelcomeBonus(user.uid);

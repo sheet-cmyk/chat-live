@@ -59,6 +59,10 @@ class SeatsWriter {
     await _repo.leaveSeat(_roomId, index);
   }
 
+  Future<void> leaveSeatIfOwner(int index, String userId) async {
+    await _repo.leaveSeatIfOwner(_roomId, index, userId);
+  }
+
   Future<void> toggleMute(int index, bool currentMuted) async {
     await _repo.setSeatMuted(_roomId, index, !currentMuted);
   }
@@ -155,3 +159,10 @@ class _ChatWriter {
 final isMicMutedProvider = StateProvider<bool>((ref) => false);
 final myCurrentSeatProvider = StateProvider<int>((ref) => -1);
 final isHostProvider = StateProvider<bool>((ref) => false);
+
+// ── كتم الدردشة (roomId::userId) ─────────────────────────────────
+final chatMutedProvider = StreamProvider.family<bool, String>((ref, key) {
+  final idx = key.indexOf('::');
+  if (idx < 0) return const Stream.empty();
+  return RoomStateRepository().isChatMutedStream(key.substring(0, idx), key.substring(idx + 2));
+});

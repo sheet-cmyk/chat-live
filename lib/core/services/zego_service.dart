@@ -28,7 +28,7 @@ class ZegoService {
       await ZegoExpressEngine.createEngineWithProfile(
         ZegoEngineProfile(
           appId,
-          ZegoScenario.StandardVoiceCall,
+          ZegoScenario.StandardChatroom,  // multi-person voice, speaker by default
           appSign: appSign,
         ),
       );
@@ -95,6 +95,9 @@ class ZegoService {
       await ZegoExpressEngine.instance.startPublishingStream('${roomId}_$userId');
       await ZegoExpressEngine.instance.muteMicrophone(true);
 
+      // Route audio to loudspeaker (default is earpiece for voice calls).
+      await ZegoExpressEngine.instance.setAudioRouteToSpeaker(true);
+
       _currentRoomId = roomId;
       debugPrint('[ZegoService] ✅ دخل الغرفة: $roomId');
     } catch (e) {
@@ -136,6 +139,11 @@ class ZegoService {
   Future<void> setSpeakerVolume(int volume) async {
     if (!_initialized) return;
     await ZegoExpressEngine.instance.setPlayVolume('', volume);
+  }
+
+  Future<void> setSpeakerEnabled(bool enabled) async {
+    if (!_initialized) return;
+    await ZegoExpressEngine.instance.setAudioRouteToSpeaker(enabled);
   }
 
   Future<void> startSoundLevelMonitor() async {

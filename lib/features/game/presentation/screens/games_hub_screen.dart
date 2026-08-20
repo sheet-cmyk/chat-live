@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/routes.dart';
 import '../../../../features/wallet/presentation/providers/wallet_provider.dart';
 import 'lucky_wheel_screen.dart';
 import 'dice_betting_screen.dart';
 import 'coin_flip_screen.dart';
 import 'number_guess_screen.dart';
+import 'greedy_star_screen.dart';
 
 class GamesHubScreen extends ConsumerWidget {
   const GamesHubScreen({super.key});
@@ -84,6 +87,20 @@ class GamesHubScreen extends ConsumerWidget {
               subtitle: 'اختر رقماً من 1-5\nواربح 4 أضعاف',
               gradient: const [Color(0xFF00B894), Color(0xFF00796B)],
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NumberGuessScreen())),
+            ),
+            _GameCard(
+              emoji: '🍬',
+              title: 'Sweet Bonanza',
+              subtitle: 'لعبة الفواكه\nالمتتالية',
+              gradient: const [Color(0xFFFF6B9D), Color(0xFFFF3D7F)],
+              onTap: () => context.push(AppRoutes.sweetBonanza),
+            ),
+            _GameCard(
+              emoji: '⭐',
+              title: 'Greedy Star',
+              subtitle: 'راهن على الطعام\nوادر العجلة',
+              gradient: const [Color(0xFFF5A623), Color(0xFFD4700A)],
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GreedyStarScreen())),
             ),
           ],
         ),

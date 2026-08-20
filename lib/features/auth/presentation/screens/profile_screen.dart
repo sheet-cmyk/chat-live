@@ -7,6 +7,7 @@ import '../../../../app/routes.dart';
 import '../providers/auth_provider.dart';
 import '../../../wallet/presentation/providers/wallet_provider.dart';
 import '../../../levels/presentation/providers/level_provider.dart';
+import '../../../admin/presentation/providers/admin_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -19,6 +20,7 @@ class ProfileScreen extends ConsumerWidget {
     final diamonds = balance.valueOrNull?['diamonds'] ?? 0;
     final level = ref.watch(userLevelProvider);
     final progress = ref.watch(levelProgressProvider);
+    final isAdmin = ref.watch(isAdminProvider).valueOrNull == true;
 
     return authState.when(
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator(color: AppColors.primary))),
@@ -197,6 +199,13 @@ class ProfileScreen extends ConsumerWidget {
                         color: AppColors.primary,
                         onTap: () {},
                       ),
+                      if (isAdmin)
+                        _ProfileButton(
+                          icon: Icons.admin_panel_settings_rounded,
+                          label: 'لوحة الإدارة ⚙️',
+                          color: Colors.amber,
+                          onTap: () => context.push(AppRoutes.admin),
+                        ),
                       _ProfileButton(
                         icon: Icons.logout_rounded,
                         label: 'تسجيل الخروج',

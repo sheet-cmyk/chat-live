@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../data/models/room_message_model.dart';
+
+typedef UserTapCallback = void Function(String userId, String userName, String? avatar);
 
 class RoomChatMessages extends StatelessWidget {
   const RoomChatMessages({
     super.key,
     required this.messages,
     required this.scrollController,
+    this.onUserTap,
   });
 
   final List<RoomMessageModel> messages;
   final ScrollController scrollController;
+  final UserTapCallback? onUserTap;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +27,9 @@ class RoomChatMessages extends StatelessWidget {
       itemBuilder: (_, i) {
         final msg = messages[i];
         if (msg.type == MessageType.gift) return _GiftMessage(msg: msg);
-        return msg.isSystem ? _SystemMessage(msg: msg) : _UserMessage(msg: msg);
+        return msg.isSystem
+            ? _SystemMessage(msg: msg)
+            : _UserMessage(msg: msg, onUserTap: onUserTap);
       },
     );
   }
@@ -89,8 +94,9 @@ class _GiftMessage extends StatelessWidget {
 }
 
 class _UserMessage extends StatelessWidget {
-  const _UserMessage({required this.msg});
+  const _UserMessage({required this.msg, this.onUserTap});
   final RoomMessageModel msg;
+  final UserTapCallback? onUserTap;
 
   @override
   Widget build(BuildContext context) {
@@ -100,22 +106,25 @@ class _UserMessage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // أفاتار المُرسِل
-          CircleAvatar(
-            radius: 13,
-            backgroundColor: AppColors.primary,
-            backgroundImage: msg.senderAvatar != null
-                ? CachedNetworkImageProvider(msg.senderAvatar!)
-                : null,
-            child: msg.senderAvatar == null
-                ? Text(
-                    (msg.senderName ?? '?')[0].toUpperCase(),
-                    style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
-                  )
-                : null,
+          // أفاتار المُرسِل — اضغط عليه لفتح الملف الشخصي
+          GestureDetector(
+            onTap: () => _tapUser(),
+            child: CircleAvatar(
+              radius: 13,
+              backgroundColor: AppColors.primary,
+              backgroundImage: msg.senderAvatar != null
+                  ? NetworkImage(msg.senderAvatar!)
+                  : null,
+              child: msg.senderAvatar == null
+                  ? Text(
+                      (msg.senderName ?? '?')[0].toUpperCase(),
+                      style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                    )
+                  : null,
+            ),
           ),
           const SizedBox(width: 6),
-          // اسم + رسالة
+          // اسم + رسالة — اضغط على الاسم لفتح الملف الشخصي
           Flexible(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -131,13 +140,18 @@ class _UserMessage extends StatelessWidget {
               child: RichText(
                 text: TextSpan(
                   children: [
-                    TextSpan(
-                      text: '${msg.senderName ?? ''} ',
-                      style: const TextStyle(
-                        color: AppColors.primaryLight,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'Cairo',
+                    WidgetSpan(
+                      child: GestureDetector(
+                        onTap: () => _tapUser(),
+                        child: Text(
+                          '${msg.senderName ?? ''} ',
+                          style: const TextStyle(
+                            color: AppColors.primaryLight,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Cairo',
+                          ),
+                        ),
                       ),
                     ),
                     TextSpan(
@@ -156,5 +170,11 @@ class _UserMessage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _tapUser() {
+    if (onUserTap != null && msg.senderId != null) {
+      onUserTap!(msg.senderId!, msg.senderName ?? 'مستخدم', msg.senderAvatar);
+    }
   }
 }

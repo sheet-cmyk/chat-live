@@ -16,13 +16,33 @@ service cloud.firestore {
         get(/databases/$(database)/documents/rooms/$(roomId)).data.hostUid == request.auth.uid;
     }
 
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // ── الإداريون ─────────────────────────────────────────────────
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && adminId == request.auth.uid
+        && request.auth.token.email == 'hussein1sheet@gmail.com';
+      allow write: if isAdmin();
+    }
+
+    // ── المستخدمون المحظورون بواسطة الإدارة ──────────────────────
+    match /banned_users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     // ── المستخدمون ────────────────────────────────────────────────
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isOwner(userId)
         || (isSignedIn() && request.auth.uid == userId
             && request.resource.data.keys().hasOnly(['isOnline', 'lastSeen', 'fcmToken']));
-      allow update: if isOwner(userId)
+      allow update: if isAdmin()
+        || isOwner(userId)
         || (isSignedIn() && request.auth.uid == userId
             && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['isOnline', 'lastSeen', 'fcmToken']));
@@ -46,7 +66,7 @@ service cloud.firestore {
       allow update: if isRoomHost(roomId)
         || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['onlineCount', 'announcement']));
-      allow delete: if isRoomHost(roomId);
+      allow delete: if isRoomHost(roomId) || isAdmin();
 
       // مقاعد الغرفة
       match /seats/{seatIndex} {
@@ -72,6 +92,18 @@ service cloud.firestore {
       match /gifts/{giftId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn();
+      }
+
+      // كتم الدردشة — الإدارة والمضيف فقط
+      match /chat_muted/{userId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin() || isRoomHost(roomId);
+      }
+
+      // طرد من الغرفة — الإدارة والمضيف فقط
+      match /room_kicks/{userId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin() || isRoomHost(roomId);
       }
     }
 
@@ -128,10 +160,8 @@ service cloud.firestore {
     // ── معاملات المحفظة ───────────────────────────────────────────
     match /transactions/{txId} {
       allow read: if isSignedIn()
-        && (resource.data.senderId == request.auth.uid
-            || resource.data.receiverId == request.auth.uid);
-      allow create: if isSignedIn()
-        && request.resource.data.senderId == request.auth.uid;
+        && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn();
       allow update, delete: if false;
     }
 
@@ -153,6 +183,24 @@ service cloud.firestore {
     match /rankings/{rankDoc} {
       allow read: if isSignedIn();
       allow write: if false;
+    }
+
+    // ── ألعاب متعددة اللاعبين ─────────────────────────────────────
+    match /games/{gameId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+
+      match /rounds/{roundId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn();
+
+        match /bets/{userId} {
+          allow read: if isSignedIn();
+          allow create: if isOwner(userId);
+          allow update: if isOwner(userId);
+        }
+      }
     }
 
     // ── التبليغات ─────────────────────────────────────────────────

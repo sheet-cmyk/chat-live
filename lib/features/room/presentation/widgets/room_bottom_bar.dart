@@ -12,6 +12,8 @@ class RoomBottomBar extends ConsumerStatefulWidget {
     required this.onGift,
     required this.onSettings,
     required this.isHost,
+    required this.roomId,
+    required this.currentUserId,
     this.onSoundEffects,
   });
 
@@ -19,6 +21,8 @@ class RoomBottomBar extends ConsumerStatefulWidget {
   final VoidCallback onGift;
   final VoidCallback onSettings;
   final bool isHost;
+  final String roomId;
+  final String currentUserId;
   final VoidCallback? onSoundEffects;
 
   @override
@@ -46,44 +50,71 @@ class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
   @override
   Widget build(BuildContext context) {
     final isMuted = ref.watch(isMicMutedProvider);
+    final chatMuteKey = '${widget.roomId}::${widget.currentUserId}';
+    final isChatMuted = ref.watch(chatMutedProvider(chatMuteKey)).valueOrNull == true;
 
     return Container(
       color: Colors.black.withAlpha(160),
       padding: EdgeInsets.fromLTRB(12, 8, 12, MediaQuery.of(context).viewInsets.bottom + 12),
-      child: _showInput ? _inputRow() : _actionRow(isMuted),
+      child: _showInput ? _inputRow(isChatMuted) : _actionRow(isMuted, isChatMuted),
     );
   }
 
-  Widget _actionRow(bool isMuted) {
+  Widget _actionRow(bool isMuted, bool isChatMuted) {
+    final isOnSeat = ref.watch(myCurrentSeatProvider) >= 0;
     return Row(
       children: [
-        // ميكروفون
-        _ActionBtn(
-          icon: isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-          color: isMuted ? AppColors.error : AppColors.primary,
-          onTap: () async {
-            final newMuted = !isMuted;
-            ref.read(isMicMutedProvider.notifier).state = newMuted;
-            await ZegoService().setMicMuted(newMuted);
-          },
-          filled: true,
+        // ميكروفون — يعمل فقط عند الجلوس على مقعد
+        Opacity(
+          opacity: isOnSeat ? 1.0 : 0.4,
+          child: _ActionBtn(
+            icon: isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+            color: isMuted ? AppColors.error : AppColors.primary,
+            onTap: () async {
+              if (!isOnSeat) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('صعّد على مقعد لاستخدام الميكروفون',
+                        style: TextStyle(fontFamily: 'Cairo')),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+                return;
+              }
+              final newMuted = !isMuted;
+              ref.read(isMicMutedProvider.notifier).state = newMuted;
+              await ZegoService().setMicMuted(newMuted);
+            },
+            filled: true,
+          ),
         ),
         const SizedBox(width: 8),
         // الدردشة
         Expanded(
           child: GestureDetector(
-            onTap: () => setState(() => _showInput = true),
+            onTap: () {
+              if (isChatMuted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('تم تقييدك من الكتابة في هذه الغرفة', style: TextStyle(fontFamily: 'Cairo')),
+                  backgroundColor: Colors.red,
+                  duration: Duration(seconds: 2),
+                ));
+                return;
+              }
+              setState(() => _showInput = true);
+            },
             child: Container(
               height: 40,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(20),
+                color: isChatMuted ? Colors.red.withAlpha(20) : Colors.white.withAlpha(20),
                 borderRadius: BorderRadius.circular(20),
+                border: isChatMuted ? Border.all(color: Colors.red.withAlpha(80)) : null,
               ),
               alignment: Alignment.centerRight,
-              child: const Text(
-                'اكتب رسالة...',
-                style: TextStyle(color: AppColors.textHint, fontSize: 13, fontFamily: 'Cairo'),
+              child: Text(
+                isChatMuted ? '🚫 مقيّد من الكتابة' : 'اكتب رسالة...',
+                style: TextStyle(color: isChatMuted ? Colors.red.shade300 : AppColors.textHint, fontSize: 13, fontFamily: 'Cairo'),
               ),
             ),
           ),
@@ -117,7 +148,13 @@ class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
     );
   }
 
-  Widget _inputRow() {
+  Widget _inputRow(bool isChatMuted) {
+    if (isChatMuted) {
+      // Double safety: close input if user got muted while typing
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _showInput = false);
+      });
+    }
     return Row(
       children: [
         IconButton(
