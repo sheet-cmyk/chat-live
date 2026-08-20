@@ -58,9 +58,9 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   int _resultCountdown = 7;
   int _highlight = -1;
 
-  // Draft bets: foodIndex → amount (0 = food selected but no amount yet)
+  // Draft bets: foodIndex → accumulated amount
   final Map<int, int> _draft = {};
-  int? _focusedFood; // which food the amount bar is currently configuring
+  int _selectedAmount = 1000; // currently active chip on amount bar
 
   int _myWinAmount = 0;
   bool _claimDone = false;
@@ -165,7 +165,6 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
         _myWinAmount = 0;
         _claimDone = false;
         _draft.clear();
-        _focusedFood = null;
         _betterCounts = {};
       });
     }
@@ -288,48 +287,27 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
 
   // ── Draft bet actions ──────────────────────────────────────────────
 
-  void _onFoodTap(int fi) {
+  // Each tap adds _selectedAmount to that food (cumulative, no undo)
+  void _onFoodTap(int fi, int coins) {
     if (_localPhase != 'betting' || _myBet != null) return;
-    setState(() {
-      if (_focusedFood == fi) {
-        // Tap focused food again → deselect it
-        _draft.remove(fi);
-        _focusedFood = _draft.isNotEmpty ? _draft.keys.last : null;
-      } else if (_draft.containsKey(fi)) {
-        // Tap already-selected food → focus it for amount edit
-        _focusedFood = fi;
-      } else {
-        // New food: add with 0 amount, focus it
-        if (_draft.length >= 6) {
-          _showToast('الحد الأقصى 6 أطعمة مختلفة');
-          return;
-        }
-        _draft[fi] = 0;
-        _focusedFood = fi;
-      }
-    });
+    if (_selectedAmount == 0) { _showToast('اختر مبلغاً من الشريط أولاً'); return; }
+    if (!_draft.containsKey(fi) && _draft.length >= 6) {
+      _showToast('الحد الأقصى 6 أطعمة مختلفة');
+      return;
+    }
+    final newTotal = _draft.values.fold(0, (s, v) => s + v) + _selectedAmount;
+    if (newTotal > coins) { _showToast('رصيدك غير كافٍ 🪙'); return; }
+    setState(() => _draft[fi] = (_draft[fi] ?? 0) + _selectedAmount);
   }
 
   void _onAmountTap(int amt) {
-    if (_focusedFood == null) { _showToast('اضغط على طعام أولاً'); return; }
-    setState(() => _draft[_focusedFood!] = amt);
+    setState(() => _selectedAmount = amt);
   }
 
-  void _removeDraftItem(int fi) {
-    setState(() {
-      _draft.remove(fi);
-      if (_focusedFood == fi) {
-        _focusedFood = _draft.isNotEmpty ? _draft.keys.last : null;
-      }
-    });
-  }
-
-  Future<void> _onConfirm(int coins) async {
+  Future<void> _onBet(int coins) async {
     if (_localPhase != 'betting') { _showToast('انتهى وقت الرهان'); return; }
     if (_myBet != null) { _showToast('رهنت بالفعل في هذه الجولة'); return; }
-    if (_draft.isEmpty) { _showToast('اختر طعاماً واحداً على الأقل'); return; }
-    final hasAmounts = _draft.values.any((v) => v > 0);
-    if (!hasAmounts) { _showToast('أضف مبلغاً للرهان'); return; }
+    if (_draft.isEmpty) { _showToast('اضغط على الأطعمة لإضافة رهانات'); return; }
     final total = _draft.values.fold(0, (s, v) => s + v);
     if (total > coins) { _showToast('رصيدك غير كافٍ — المطلوب ${_fmtNum(total)} 🪙'); return; }
 
@@ -343,7 +321,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     if (err != null) {
       _showToast(err);
     } else {
-      setState(() { _draft.clear(); _focusedFood = null; });
+      setState(() => _draft.clear());
       _showToast('✅ تم تسجيل رهانك!');
     }
   }
@@ -380,10 +358,10 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                   child: SingleChildScrollView(
                     physics: const ClampingScrollPhysics(),
                     child: Column(children: [
-                      _buildWheelArea(),
+                      _buildWheelArea(coins),
                       _buildPhaseBar(),
-                      _buildAmountBar(coins),
-                      if (_myBet != null) _buildPlacedBetSummary() else _buildDraftPanel(coins),
+                      _buildAmountBar(),
+                      if (_myBet != null) _buildPlacedBetSummary() else _buildBetBar(coins),
                       _buildBottomRow(coins),
                       const SizedBox(height: 8),
                     ]),
@@ -490,7 +468,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
 
   // ── Wheel ──────────────────────────────────────────────────────────
 
-  Widget _buildWheelArea() {
+  Widget _buildWheelArea(int coins) {
     return LayoutBuilder(builder: (ctx, box) {
       final w = box.maxWidth;
       final cx = w / 2;
@@ -499,21 +477,20 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
         width: w, height: h,
         child: Stack(clipBehavior: Clip.none, children: [
           CustomPaint(size: Size(w, h), painter: _WheelPainter(cx: cx, cy: cy, r: r)),
-          for (int i = 0; i < 8; i++) _buildBubble(i, cx, cy, r, bSize),
+          for (int i = 0; i < 8; i++) _buildBubble(i, cx, cy, r, bSize, coins),
           _buildCenterStar(cx, cy),
         ]),
       );
     });
   }
 
-  Widget _buildBubble(int i, double cx, double cy, double r, double bSize) {
+  Widget _buildBubble(int i, double cx, double cy, double r, double bSize, int coins) {
     final angle = -pi / 2 + i * pi / 4;
     final bx = cx + r * cos(angle);
     final by = cy + r * sin(angle);
     final food = _kFoods[i];
 
     final inDraft = _draft.containsKey(i);
-    final isFocused = _focusedFood == i;
     final draftAmt = _draft[i] ?? 0;
     final isMyBet = _myBet?.hasBetOn(i) ?? false;
     final myBetAmt = _myBet?.amountFor(i) ?? 0;
@@ -525,8 +502,8 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     Widget bubble = AnimatedBuilder(
       animation: Listenable.merge([_pulseCtrl, _glowCtrl]),
       builder: (_, __) {
-        final scale = (isFocused || isMyBet) && _localPhase == 'betting' ? _pulse.value : 1.0;
-        final glowR = isHighlighted ? _glow.value : (isFocused ? 10.0 : inDraft ? 5.0 : 0.0);
+        final scale = (inDraft || isMyBet) && _localPhase == 'betting' ? _pulse.value : 1.0;
+        final glowR = isHighlighted ? _glow.value : (inDraft ? 8.0 : 0.0);
         return Transform.scale(
           scale: scale,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -547,16 +524,14 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                   ),
                   border: Border.all(
                     color: isHighlighted ? Colors.white
-                        : isFocused ? const Color(0xFF27AE60)
                         : isMyBet ? const Color(0xFF27AE60)
                         : inDraft ? const Color(0xFFFFD700)
                         : const Color(0xFFDAA520),
-                    width: isHighlighted ? 4 : (isFocused || isMyBet || inDraft) ? 3.5 : 2.5,
+                    width: isHighlighted ? 4 : (isMyBet || inDraft) ? 3.5 : 2.5,
                   ),
                   boxShadow: [BoxShadow(
                     color: isHighlighted ? Colors.white.withAlpha(220)
-                        : isFocused ? Colors.green.withAlpha(180)
-                        : inDraft ? const Color(0xFFFFD700).withAlpha(140)
+                        : inDraft ? const Color(0xFFFFD700).withAlpha(160)
                         : Colors.black.withAlpha(55),
                     blurRadius: glowR + 4, spreadRadius: isHighlighted ? 3 : 0,
                   )],
@@ -632,7 +607,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     return Positioned(
       left: bx - bSize / 2,
       top: by - bSize / 2,
-      child: GestureDetector(onTap: canBet ? () => _onFoodTap(i) : null, child: bubble),
+      child: GestureDetector(onTap: canBet ? () => _onFoodTap(i, coins) : null, child: bubble),
     );
   }
 
@@ -718,12 +693,11 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     if (_localPhase == 'betting') {
       if (_myBet != null) {
         msg = '✅ رهانك مسجّل — ${_myBet!.items.length} طعام، مجموع ${_fmtNum(_myBet!.totalAmount)} 🪙';
-      } else if (_focusedFood != null) {
-        msg = 'اختر المبلغ للـ${_kFoods[_focusedFood!].name} ${_kFoods[_focusedFood!].emoji}';
       } else if (_draft.isNotEmpty) {
-        msg = 'اضغط على طعام لضبط مبلغه، أو تأكيد الرهان';
+        final total = _draft.values.fold(0, (s, v) => s + v);
+        msg = 'رهانك: ${_fmtFull(total)} 🪙 على ${_draft.length} طعام — اضغط "راهن" للتسجيل';
       } else {
-        msg = 'اضغط على الطعام لاختياره ← حدد المبلغ ← تأكيد';
+        msg = 'اختر المبلغ ← اضغط على الطعام لإضافة الرهان';
       }
     } else if (_localPhase == 'spinning') {
       msg = '🎡 العجلة تدور... انتظر النتيجة';
@@ -746,72 +720,63 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     );
   }
 
-  // ── Amount bar ─────────────────────────────────────────────────────
+  // ── Amount bar — select chip, then tap foods to accumulate ───────────
 
-  Widget _buildAmountBar(int coins) {
+  Widget _buildAmountBar() {
     final canBet = _localPhase == 'betting' && _myBet == null;
-    final focused = _focusedFood != null;
 
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: [Color(0xFF5C2E00), Color(0xFF7A3E00), Color(0xFF5C2E00)]),
+        gradient: LinearGradient(colors: [Color(0xFF4A2000), Color(0xFF6B3200), Color(0xFF4A2000)]),
         border: Border(
           top: BorderSide(color: Color(0xFF3A1A00), width: 2),
           bottom: BorderSide(color: Color(0xFF3A1A00), width: 2),
         ),
       ),
       child: Column(children: [
-        if (canBet && !focused)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 5),
-            child: Text('اضغط على طعام ثم اختر المبلغ',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withAlpha(160), fontFamily: 'Cairo', fontSize: 11)),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 5),
+          child: Text(
+            canBet ? 'اختر المبلغ ← اضغط على الطعام (كل ضغطة تُضيف المبلغ)' : '',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withAlpha(150), fontFamily: 'Cairo', fontSize: 10),
           ),
-        if (canBet && focused)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 5),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(_kFoods[_focusedFood!].emoji, style: const TextStyle(fontSize: 18)),
-              const SizedBox(width: 6),
-              Text('اختر مبلغ ${_kFoods[_focusedFood!].name}:',
-                style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 12)),
-            ]),
-          ),
+        ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: _kAmounts.map((amt) {
-            final isSelected = focused && (_draft[_focusedFood] == amt);
-            final canAfford = amt <= coins;
+            final isSelected = _selectedAmount == amt;
             return GestureDetector(
               onTap: canBet ? () => _onAmountTap(amt) : null,
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: isSelected
-                        ? [const Color(0xFFFFD700), const Color(0xFFFFA500)]
-                        : [const Color(0xFF2D2D2D), const Color(0xFF1A1A1A)],
+                        ? [const Color(0xFFFFD700), const Color(0xFFFFA000)]
+                        : [const Color(0xFF2A2A2A), const Color(0xFF1A1A1A)],
                   ),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: isSelected ? const Color(0xFFFFD700) : Colors.transparent, width: 1.5),
-                  boxShadow: isSelected ? [BoxShadow(color: Colors.amber.withAlpha(100), blurRadius: 8)] : [],
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isSelected ? Colors.white : Colors.transparent,
+                    width: isSelected ? 2 : 0,
+                  ),
+                  boxShadow: isSelected
+                      ? [BoxShadow(color: Colors.amber.withAlpha(140), blurRadius: 10, spreadRadius: 1)]
+                      : [],
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text(_fmtNum(amt),
-                    style: TextStyle(
-                      color: !canBet ? Colors.white24
-                          : isSelected ? Colors.brown.shade900
-                          : (canAfford ? Colors.white : Colors.white38),
-                      fontSize: 10, fontWeight: FontWeight.w800)),
-                  const SizedBox(width: 2),
-                  Text('🪙', style: TextStyle(
-                    fontSize: 10,
-                    color: !canBet ? Colors.white24 : isSelected ? Colors.brown : Colors.amber)),
-                ]),
+                child: Text(
+                  _fmtNum(amt),
+                  style: TextStyle(
+                    color: !canBet ? Colors.white24
+                        : isSelected ? Colors.brown.shade900
+                        : Colors.white70,
+                    fontSize: 11, fontWeight: FontWeight.w900,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
               ),
             );
           }).toList(),
@@ -820,131 +785,81 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     );
   }
 
-  // ── Draft panel ────────────────────────────────────────────────────
+  // ── Bet bar — shows draft summary + RAH BET button ────────────────
 
-  Widget _buildDraftPanel(int coins) {
+  Widget _buildBetBar(int coins) {
     if (_localPhase != 'betting') return const SizedBox.shrink();
 
-    final hasItems = _draft.isNotEmpty;
     final total = _draft.values.fold(0, (s, v) => s + v);
-    final validCount = _draft.values.where((v) => v > 0).length;
-    final canConfirm = validCount > 0 && total <= coins && !_isPlacing;
+    final canBet = _draft.isNotEmpty && total <= coins && !_isPlacing;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(10, 4, 10, 4),
-      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.fromLTRB(10, 5, 10, 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.black.withAlpha(80),
+        color: Colors.black.withAlpha(90),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFDAA520).withAlpha(80)),
+        border: Border.all(
+          color: _draft.isEmpty
+              ? Colors.white.withAlpha(30)
+              : const Color(0xFFFFD700).withAlpha(120),
+          width: 1.5,
+        ),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Header
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Row(children: [
-            const Text('🛒', style: TextStyle(fontSize: 16)),
-            const SizedBox(width: 6),
-            Text('مسودة رهانك (${_draft.length}/6)',
-              style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 13)),
-          ]),
-          if (hasItems)
-            GestureDetector(
-              onTap: () => setState(() { _draft.clear(); _focusedFood = null; }),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: Colors.red.withAlpha(150), borderRadius: BorderRadius.circular(10)),
-                child: const Text('مسح الكل', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.bold)),
-              ),
-            ),
-        ]),
-        const SizedBox(height: 8),
-
-        if (!hasItems)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: const Text('اضغط على الأطعمة في العجلة لإضافتها', textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white38, fontFamily: 'Cairo', fontSize: 12)),
-          )
-        else ...[
-          // Draft items
-          Wrap(spacing: 6, runSpacing: 6, children: _draft.entries.map((e) {
-            final fi = e.key;
-            final amt = e.value;
-            final isFocused = _focusedFood == fi;
-            return GestureDetector(
-              onTap: () => setState(() => _focusedFood = fi),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.fromLTRB(8, 5, 4, 5),
-                decoration: BoxDecoration(
-                  color: isFocused ? const Color(0xFF27AE60).withAlpha(180) : Colors.white.withAlpha(20),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isFocused ? const Color(0xFF27AE60) : (amt > 0 ? const Color(0xFFFFD700).withAlpha(100) : Colors.white24),
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text(_kFoods[fi].emoji, style: const TextStyle(fontSize: 16)),
-                  const SizedBox(width: 4),
-                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(_kFoods[fi].name,
-                      style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 10)),
-                    Text(amt > 0 ? '${_fmtNum(amt)} 🪙 → ${_fmtNum(amt * _kFoods[fi].mult)} 🪙' : 'اضغط لاختيار المبلغ',
-                      style: TextStyle(
-                        color: amt > 0 ? const Color(0xFFFFD700) : Colors.white38,
-                        fontFamily: 'Cairo', fontSize: 9)),
-                  ]),
-                  const SizedBox(width: 6),
-                  GestureDetector(
-                    onTap: () => _removeDraftItem(fi),
-                    child: Container(
-                      width: 18, height: 18,
-                      decoration: BoxDecoration(color: Colors.red.withAlpha(120), shape: BoxShape.circle),
-                      child: const Icon(Icons.close, color: Colors.white, size: 12),
+      child: Row(children: [
+        // Draft chips
+        Expanded(
+          child: _draft.isEmpty
+              ? Text('اضغط على الأطعمة لإضافة رهانات',
+                  style: TextStyle(color: Colors.white.withAlpha(100), fontFamily: 'Cairo', fontSize: 11))
+              : Wrap(spacing: 5, runSpacing: 4, children: _draft.entries.map((e) {
+                  final food = _kFoods[e.key];
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(18),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFFD700).withAlpha(80)),
                     ),
-                  ),
-                ]),
+                    child: Text(
+                      '${food.emoji} ${_fmtFull(e.value)}',
+                      style: const TextStyle(color: Colors.white, fontFamily: 'Cairo',
+                          fontWeight: FontWeight.w700, fontSize: 11),
+                    ),
+                  );
+                }).toList()),
+        ),
+        const SizedBox(width: 8),
+        // BET button
+        GestureDetector(
+          onTap: canBet ? () => _onBet(coins) : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: canBet
+                    ? [const Color(0xFF27AE60), const Color(0xFF1A7A3A)]
+                    : [Colors.grey.shade700, Colors.grey.shade800],
               ),
-            );
-          }).toList()),
-
-          const SizedBox(height: 10),
-
-          // Total + Confirm
-          Row(children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('الإجمالي: ${_fmtNum(total)} 🪙',
-                style: TextStyle(
-                  color: total > coins ? Colors.red.shade300 : const Color(0xFFFFD700),
-                  fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 14)),
-              Text('الربح المحتمل: ${_fmtNum(_draft.entries.fold(0, (s, e) => s + e.value * _kFoods[e.key].mult))} 🪙 (إجمالي أضعاف)',
-                style: const TextStyle(color: Colors.white54, fontFamily: 'Cairo', fontSize: 10)),
-            ])),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: canConfirm ? () => _onConfirm(coins) : null,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: canConfirm
-                        ? [const Color(0xFF27AE60), const Color(0xFF1E8449)]
-                        : [Colors.grey.shade700, Colors.grey.shade800],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: canConfirm ? [BoxShadow(color: Colors.green.withAlpha(100), blurRadius: 8)] : [],
-                ),
-                child: _isPlacing
-                    ? const SizedBox(width: 20, height: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('تأكيد الرهان', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 13)),
-              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: canBet
+                  ? [BoxShadow(color: Colors.green.withAlpha(120), blurRadius: 10)]
+                  : [],
             ),
-          ]),
-        ],
+            child: _isPlacing
+                ? const SizedBox(width: 22, height: 22,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                : Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Text('راهن', style: TextStyle(color: Colors.white,
+                        fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 14)),
+                    if (total > 0)
+                      Text('${_fmtFull(total)} 🪙',
+                        style: const TextStyle(color: Color(0xFFFFD700),
+                            fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 10)),
+                  ]),
+          ),
+        ),
       ]),
     );
   }
