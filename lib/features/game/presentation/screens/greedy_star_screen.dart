@@ -531,7 +531,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       builder: (_, __) {
         const scale = 1.0;
         final glowR = isHighlighted ? _glow.value : 0.0;
-        final isPharaoh = i == 7; // السمك → الفرعون (مرئياً فقط)
+        const isPharaoh = false;
         return Transform.scale(
           scale: scale,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1190,9 +1190,9 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
               child: Column(children: _kFoods.map((f) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(children: [
-                  Text(f.name == 'سمك' ? '👑' : f.emoji, style: const TextStyle(fontSize: 18)),
+                  Text(f.emoji, style: const TextStyle(fontSize: 18)),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(f.name == 'سمك' ? 'فرعون' : f.name,
+                  Expanded(child: Text(f.name,
                     style: const TextStyle(color: _kCream, fontFamily: 'Cairo', fontSize: 12))),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
