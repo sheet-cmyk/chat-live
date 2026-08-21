@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../data/models/seat_model.dart';
+import '../providers/room_provider.dart';
 
 // حامل لتفعيل إيموجي جديد حتى عند تكرار نفس الإيموجي
 class EmojiTrigger {
@@ -91,7 +93,7 @@ class _SeatWidgetState extends State<SeatWidget>
   @override
   Widget build(BuildContext context) {
     final seat = widget.seat;
-    final avatarSize = widget.isHost ? 56.0 : 46.0;
+    final avatarSize = widget.isHost ? 76.0 : 62.0;
 
     return GestureDetector(
       onTap: widget.onTap,
@@ -114,8 +116,8 @@ class _SeatWidgetState extends State<SeatWidget>
                   children: [
                     if (seat.isSpeaking)
                       Container(
-                        width: widget.isHost ? 62 : 52,
-                        height: widget.isHost ? 62 : 52,
+                        width: widget.isHost ? 84 : 70,
+                        height: widget.isHost ? 84 : 70,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(color: AppColors.primary, width: 2.5),
@@ -152,7 +154,7 @@ class _SeatWidgetState extends State<SeatWidget>
               ),
               const SizedBox(height: 5),
               SizedBox(
-                width: widget.isHost ? 64 : 54,
+                width: widget.isHost ? 84 : 70,
                 child: Text(
                   seat.isEmpty
                       ? (seat.isLocked ? '🔒' : '+')
@@ -162,12 +164,14 @@ class _SeatWidgetState extends State<SeatWidget>
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: seat.isEmpty ? AppColors.textHint : AppColors.textPrimary,
-                    fontSize: widget.isHost ? 12 : 10,
+                    fontSize: widget.isHost ? 13 : 11,
                     fontFamily: 'Cairo',
                     fontWeight: widget.isHost ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
               ),
+              if (!seat.isEmpty && seat.userId != null)
+                _DiamondBar(userId: seat.userId!, isHost: widget.isHost),
             ],
           ),
 
@@ -203,7 +207,7 @@ class _SeatWidgetState extends State<SeatWidget>
   }
 
   Widget _buildAvatar(SeatModel seat) {
-    final size = widget.isHost ? 56.0 : 46.0;
+    final size = widget.isHost ? 76.0 : 62.0;
     if (seat.isLocked && seat.isEmpty) {
       return Container(
         width: size, height: size,
@@ -219,7 +223,7 @@ class _SeatWidgetState extends State<SeatWidget>
           color: widget.isHost ? AppColors.seatHost : AppColors.seatEmpty,
           border: Border.all(color: AppColors.divider),
         ),
-        child: Icon(Icons.add_rounded, color: AppColors.textHint, size: widget.isHost ? 28 : 22),
+        child: Icon(Icons.add_rounded, color: AppColors.textHint, size: widget.isHost ? 36 : 28),
       );
     }
     return Container(
@@ -246,6 +250,84 @@ class _SeatWidgetState extends State<SeatWidget>
                 ),
               ),
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  _DiamondBar — شريط ماسات الهدايا تحت اسم المستخدم على المايك
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _DiamondBar extends ConsumerWidget {
+  const _DiamondBar({required this.userId, this.isHost = false});
+  final String userId;
+  final bool isHost;
+
+  static const _tiers = [
+    (5000000, Color(0xFFFF2D55)),   // أحمر — 5M+
+    (1000000, Color(0xFF9B59B6)),   // بنفسجي — 1M+
+    (500000,  Color(0xFF3498DB)),   // أزرق — 500K+
+    (50000,   Color(0xFF2ECC71)),   // أخضر — 50K+
+  ];
+
+  static String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1).replaceAll('.0', '')}M';
+    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(1).replaceAll('.0', '')}K';
+    return '$n';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final diamonds = ref.watch(userGiftDiamondsProvider(userId)).valueOrNull ?? 0;
+    if (diamonds == 0) return const SizedBox.shrink();
+
+    Color? color;
+    for (final (threshold, c) in _tiers) {
+      if (diamonds >= threshold) { color = c; break; }
+    }
+
+    final label = _fmt(diamonds);
+    final fontSize = isHost ? 10.0 : 9.0;
+
+    if (color == null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 3),
+        child: Text(
+          '💎 $label',
+          style: TextStyle(
+            color: Colors.white54,
+            fontSize: fontSize,
+            fontFamily: 'Cairo',
+            height: 1.1,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          height: 3,
+          width: isHost ? 52.0 : 42.0,
+          margin: const EdgeInsets.only(top: 3, bottom: 2),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+            boxShadow: [BoxShadow(color: color.withAlpha(160), blurRadius: 5)],
+          ),
+        ),
+        Text(
+          '💎 $label',
+          style: TextStyle(
+            color: color,
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Cairo',
+            height: 1.1,
+          ),
+        ),
+      ],
     );
   }
 }

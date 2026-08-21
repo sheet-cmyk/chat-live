@@ -58,7 +58,10 @@ class WalletRepository {
       final batch = _db.batch();
       batch.update(
         _db.collection('users').doc(userId),
-        {'diamonds': FieldValue.increment(amount)},
+        {
+          'diamonds': FieldValue.increment(amount),
+          'totalGiftDiamonds': FieldValue.increment(amount),
+        },
       );
       batch.set(
         _db.collection('transactions').doc(),

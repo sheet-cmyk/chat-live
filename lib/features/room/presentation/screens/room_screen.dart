@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' show pi, cos, sin;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -195,6 +196,17 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       userName: me.displayName ?? 'مستخدم',
     );
     Navigator.of(context).pop();
+  }
+
+  // خروج كلي من الغرفة — ينزل من المايك ويغادر ZEGO
+  Future<void> _leaveRoom() async {
+    // امسح حالة التصغير إن وجدت
+    ref.read(minimizedRoomProvider.notifier).state = null;
+    // أجبر cleanup يعمل حتى لو _leftCleanly كان true سابقاً
+    _leftCleanly = false;
+    final savedSeat = ref.read(myCurrentSeatProvider);
+    await _cleanup(savedSeat: savedSeat);
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -526,7 +538,16 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
             Column(
               children: [
-                _RoomHeader(room: widget.room, onMinimize: _minimizeRoom),
+                _RoomHeader(
+                  room: widget.room,
+                  onMinimize: _minimizeRoom,
+                  onLeave: () => _leaveRoom(),
+                  isHost: isHost,
+                  onSettings: () => _showSettings(context),
+                ),
+
+                // شريط هدايا التحدي (يظهر فقط عند وجود تحدي نشط)
+                _ChallengeGiftBar(roomId: _roomId),
 
                 // المضيف
                 Padding(
@@ -550,7 +571,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                       crossAxisCount: 4,
                       mainAxisSpacing: 10,
                       crossAxisSpacing: 4,
-                      childAspectRatio: 0.75,
+                      childAspectRatio: 0.62,
                     ),
                     itemCount: 8,
                     itemBuilder: (_, i) {
@@ -604,7 +625,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       context: ctx,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => const GiftPanel(),
+      builder: (_) => GiftPanel(roomId: _roomId),
     );
   }
 
@@ -784,9 +805,18 @@ class _RoomBgPainter extends CustomPainter {
 
 // ── رأس الغرفة ─────────────────────────────────────────────────────
 class _RoomHeader extends StatelessWidget {
-  const _RoomHeader({required this.room, required this.onMinimize});
+  const _RoomHeader({
+    required this.room,
+    required this.onMinimize,
+    required this.onLeave,
+    this.isHost = false,
+    this.onSettings,
+  });
   final RoomModel room;
   final VoidCallback onMinimize;
+  final VoidCallback onLeave;
+  final bool isHost;
+  final VoidCallback? onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -796,6 +826,7 @@ class _RoomHeader extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: [
+            // سهم الرجوع (تصغير)
             GestureDetector(
               onTap: onMinimize,
               child: Container(
@@ -834,11 +865,62 @@ class _RoomHeader extends StatelessWidget {
                 ],
               ),
             ),
-            _HeaderBtn(icon: Icons.share_rounded, onTap: () {}),
+            if (isHost && onSettings != null) ...[
+              _HeaderBtn(icon: Icons.settings_rounded, onTap: onSettings!),
+              const SizedBox(width: 6),
+            ] else ...[
+              _HeaderBtn(icon: Icons.share_rounded, onTap: () {}),
+              const SizedBox(width: 6),
+            ],
+            // زر التصغير — مربع + أكبر 70%
+            _MinimizeBtn(onTap: onMinimize),
             const SizedBox(width: 6),
-            _HeaderBtn(icon: Icons.remove_rounded, onTap: onMinimize),
+            // زر الخروج الكلي X — أكبر 80%
+            _LeaveBtn(onTap: onLeave),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// زر تصغير الغرفة — شكل مربع، أكبر بـ 70%
+class _MinimizeBtn extends StatelessWidget {
+  const _MinimizeBtn({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),           // 7 × 1.7 ≈ 12
+        decoration: BoxDecoration(
+          color: Colors.black.withAlpha(100),
+          borderRadius: BorderRadius.circular(10),   // مربع مع زوايا
+        ),
+        child: const Icon(Icons.remove_rounded, color: Colors.white, size: 27), // 16 × 1.7 ≈ 27
+      ),
+    );
+  }
+}
+
+// زر الخروج الكلي — دائري أحمر، أكبر بـ 80%
+class _LeaveBtn extends StatelessWidget {
+  const _LeaveBtn({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(13),           // 7 × 1.8 ≈ 13
+        decoration: BoxDecoration(
+          color: Colors.red.withAlpha(210),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.close_rounded, color: Colors.white, size: 29), // 16 × 1.8 ≈ 29
       ),
     );
   }
@@ -884,7 +966,7 @@ class _MenuTile extends StatelessWidget {
 }
 
 // ── إعدادات الغرفة ──────────────────────────────────────────────────
-class _RoomSettingsSheet extends ConsumerWidget {
+class _RoomSettingsSheet extends ConsumerStatefulWidget {
   const _RoomSettingsSheet({
     required this.roomId,
     this.onEditAnnouncement,
@@ -897,7 +979,15 @@ class _RoomSettingsSheet extends ConsumerWidget {
   final VoidCallback? onChangeCover;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_RoomSettingsSheet> createState() => _RoomSettingsSheetState();
+}
+
+class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
+  @override
+  Widget build(BuildContext context) {
+    final challengeEnd = ref.watch(challengeEndTimeProvider(widget.roomId)).valueOrNull;
+    final hasChallenge = challengeEnd != null && challengeEnd.isAfter(DateTime.now());
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -914,30 +1004,36 @@ class _RoomSettingsSheet extends ConsumerWidget {
           const SizedBox(height: 16),
           _MenuTile(
             icon: Icons.image_rounded, label: 'تغيير صورة الغرفة', color: AppColors.blue,
-            onTap: () {
-              Navigator.pop(context);
-              onChangeCover?.call();
-            },
+            onTap: () { Navigator.pop(context); widget.onChangeCover?.call(); },
+          ),
+          _MenuTile(
+            icon: Icons.drive_file_rename_outline_rounded, label: 'تغيير اسم الغرفة', color: AppColors.primary,
+            onTap: () => _showNameDialog(context),
           ),
           _MenuTile(
             icon: Icons.edit_rounded, label: 'تعديل الغرفة', color: AppColors.primary,
-            onTap: () {
-              Navigator.pop(context);
-              onEditRoom?.call();
-            },
+            onTap: () { Navigator.pop(context); widget.onEditRoom?.call(); },
           ),
           _MenuTile(
             icon: Icons.announcement_rounded, label: 'تعديل الإعلان', color: AppColors.primary,
-            onTap: () {
-              Navigator.pop(context);
-              onEditAnnouncement?.call();
-            },
+            onTap: () { Navigator.pop(context); widget.onEditAnnouncement?.call(); },
+          ),
+          _MenuTile(
+            icon: hasChallenge ? Icons.timer_off_rounded : Icons.timer_rounded,
+            label: hasChallenge ? 'إلغاء التحدي 🏁' : 'تفعيل تحدي ⏱',
+            color: hasChallenge ? AppColors.error : const Color(0xFFFF2D78),
+            onTap: hasChallenge
+                ? () async {
+                    Navigator.pop(context);
+                    await RoomStateRepository().deactivateChallenge(widget.roomId);
+                  }
+                : () => _showChallengeDialog(context),
           ),
           _MenuTile(
             icon: Icons.mic_off_rounded, label: 'كتم الكل', color: AppColors.warning,
             onTap: () async {
-              final seats = ref.read(seatsProvider(roomId));
-              final writer = ref.read(seatsWriterProvider(roomId));
+              final seats = ref.read(seatsProvider(widget.roomId));
+              final writer = ref.read(seatsWriterProvider(widget.roomId));
               for (final s in seats) {
                 if (!s.isEmpty && !s.isMuted) await writer.toggleMute(s.index, false);
               }
@@ -953,5 +1049,332 @@ class _RoomSettingsSheet extends ConsumerWidget {
       ),
     );
   }
+
+  void _showNameDialog(BuildContext context) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('تغيير اسم الغرفة',
+            style: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 15)),
+        content: TextField(
+          controller: ctrl,
+          textDirection: TextDirection.rtl,
+          autofocus: true,
+          style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo'),
+          decoration: const InputDecoration(
+            hintText: 'اسم الغرفة الجديد',
+            hintStyle: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo'),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.divider)),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.primary)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء', style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo')),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = ctrl.text.trim();
+              if (name.isEmpty) return;
+              await RoomStateRepository().updateRoomName(widget.roomId, name);
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('حفظ',
+                style: TextStyle(color: AppColors.primary, fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showChallengeDialog(BuildContext sheetCtx) {
+    showDialog(
+      context: sheetCtx,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('⏱ تفعيل التحدي',
+            style: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('اختر مدة التحدي:',
+                style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13)),
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _DurBtn(label: 'ساعة', hours: 1, roomId: widget.roomId,
+                    dialogCtx: ctx, sheetCtx: sheetCtx),
+                _DurBtn(label: 'ساعتين', hours: 2, roomId: widget.roomId,
+                    dialogCtx: ctx, sheetCtx: sheetCtx),
+                _DurBtn(label: '3 ساعات', hours: 3, roomId: widget.roomId,
+                    dialogCtx: ctx, sheetCtx: sheetCtx),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء', style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo')),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
+// ── زر مدة التحدي ──────────────────────────────────────────────────
+class _DurBtn extends StatelessWidget {
+  const _DurBtn({
+    required this.label,
+    required this.hours,
+    required this.roomId,
+    required this.dialogCtx,
+    required this.sheetCtx,
+  });
+  final String label;
+  final int hours;
+  final String roomId;
+  final BuildContext dialogCtx;
+  final BuildContext sheetCtx;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () async {
+        final end = DateTime.now().add(Duration(hours: hours));
+        Navigator.pop(dialogCtx);
+        Navigator.pop(sheetCtx);
+        await RoomStateRepository().activateChallenge(roomId, end);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF2D78), Color(0xFFFF6B6B)],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFF2D78).withAlpha(90),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white, fontFamily: 'Cairo',
+            fontWeight: FontWeight.w700, fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  _ChallengeGiftBar — شريط هدايا التحدي المتحرك
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _ChallengeGiftBar extends ConsumerStatefulWidget {
+  const _ChallengeGiftBar({required this.roomId});
+  final String roomId;
+
+  @override
+  ConsumerState<_ChallengeGiftBar> createState() => _ChallengeGiftBarState();
+}
+
+class _ChallengeGiftBarState extends ConsumerState<_ChallengeGiftBar> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    // يحدّث كل ثانية لتحديث العداد
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  static Color _barColor(int total) {
+    if (total >= 5000000) return const Color(0xFFFF2D55);
+    if (total >= 1000000) return const Color(0xFF9B59B6);
+    if (total >= 500000)  return const Color(0xFF3498DB);
+    return const Color(0xFF2ECC71);
+  }
+
+  static double _progress(int total) {
+    if (total <= 0) return 0;
+    if (total >= 5000000) return 1.0;
+    if (total >= 1000000) return 0.75 + 0.25 * (total - 1000000) / 4000000;
+    if (total >= 500000)  return 0.50 + 0.25 * (total - 500000) / 500000;
+    if (total >= 50000)   return 0.25 + 0.25 * (total - 50000) / 450000;
+    return 0.25 * total / 50000;
+  }
+
+  static String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K';
+    return '$n';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final endTime = ref.watch(challengeEndTimeProvider(widget.roomId)).valueOrNull;
+    if (endTime == null) return const SizedBox.shrink();
+
+    final remaining = endTime.difference(DateTime.now());
+    if (remaining.isNegative) {
+      final isHost = ref.read(isHostProvider);
+      if (isHost) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          RoomStateRepository().deactivateChallenge(widget.roomId);
+        });
+      }
+      return const SizedBox.shrink();
+    }
+
+    final total = ref.watch(challengeGiftTotalProvider(widget.roomId)).valueOrNull ?? 0;
+    final progress = _progress(total);
+    final color = _barColor(total);
+
+    final h = remaining.inHours;
+    final m = remaining.inMinutes % 60;
+    final s = remaining.inSeconds % 60;
+    final timeLabel = h > 0
+        ? '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}'
+        : '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 0, 10, 4),
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.black.withAlpha(110),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withAlpha(25)),
+        boxShadow: [
+          BoxShadow(color: color.withAlpha(70), blurRadius: 10),
+        ],
+      ),
+      child: Row(
+        children: [
+          // ── يسار: إجمالي الهدايا ────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('💎', style: TextStyle(fontSize: 11)),
+                const SizedBox(width: 4),
+                Text(
+                  _fmt(total),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'Cairo',
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── وسط: شريط التقدم المتحرك ────────────────────────────
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                height: 16,
+                child: LayoutBuilder(
+                  builder: (ctx, box) {
+                    final fillWidth = box.maxWidth * progress;
+                    return Stack(
+                      children: [
+                        // خلفية شفافة
+                        Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(18),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        // الجزء المملوء
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 800),
+                          curve: Curves.easeOut,
+                          width: fillWidth.clamp(0, box.maxWidth),
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(color: color.withAlpha(200), blurRadius: 8),
+                            ],
+                          ),
+                        ),
+                        // شيمر (بريق متحرك)
+                        if (progress > 0.02)
+                          Positioned.fill(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.transparent,
+                                    Colors.white.withAlpha(35),
+                                    Colors.transparent,
+                                  ],
+                                  stops: const [0.3, 0.5, 0.7],
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+
+          // ── يمين: العداد التنازلي ────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('⏱', style: TextStyle(fontSize: 11)),
+                const SizedBox(width: 3),
+                Text(
+                  timeLabel,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Cairo',
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

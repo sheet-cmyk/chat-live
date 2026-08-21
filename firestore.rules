@@ -46,9 +46,11 @@ service cloud.firestore {
         || (isSignedIn() && request.auth.uid == userId
             && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['isOnline', 'lastSeen', 'fcmToken']))
-        // هدايا: يسمح لأي مستخدم مسجّل بزيادة حقل diamonds فقط (لا خصم)
+        // هدايا: يسمح بزيادة diamonds (وtotalGiftDiamonds) فقط — لا خصم
         || (isSignedIn()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['diamonds'])
+            && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['diamonds'])
+                || request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['diamonds', 'totalGiftDiamonds']))
             && request.resource.data.get('diamonds', 0) > resource.data.get('diamonds', 0));
       allow delete: if false;
 
@@ -69,7 +71,13 @@ service cloud.firestore {
         && request.resource.data.hostUid == request.auth.uid;
       allow update: if isRoomHost(roomId)
         || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['onlineCount', 'announcement']));
+            .hasOnly(['onlineCount', 'announcement']))
+        // هدايا التحدي: أي مستخدم يستطيع زيادة challengeGiftTotal فقط (لا خصم)
+        || (isSignedIn()
+            && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['challengeGiftTotal'])
+            && request.resource.data.get('challengeGiftTotal', 0)
+               >= resource.data.get('challengeGiftTotal', 0));
       allow delete: if isRoomHost(roomId) || isAdmin();
 
       // مقاعد الغرفة

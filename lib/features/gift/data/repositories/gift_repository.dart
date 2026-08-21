@@ -50,6 +50,13 @@ class GiftRepository {
         );
       }
 
+      // تحديث إجمالي هدايا التحدي في الغرفة (non-critical)
+      try {
+        await _db.collection('rooms').doc(roomId).update({
+          'challengeGiftTotal': FieldValue.increment(totalDiamonds),
+        });
+      } catch (_) {}
+
       try {
         await _db.collection('rooms').doc(roomId).collection('gifts').add(
           GiftSentRecord(

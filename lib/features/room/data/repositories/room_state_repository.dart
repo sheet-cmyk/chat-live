@@ -195,4 +195,24 @@ class RoomStateRepository {
   Stream<bool> watchRoomKick(String roomId, String userId) {
     return _kicks(roomId).doc(userId).snapshots().map((s) => s.exists);
   }
+
+  // ── إدارة الغرفة ─────────────────────────────────────────────────
+  Future<void> updateRoomName(String roomId, String newName) async {
+    await _db.collection('rooms').doc(roomId).update({'name': newName});
+  }
+
+  Future<void> activateChallenge(String roomId, DateTime endTime) async {
+    await _db.collection('rooms').doc(roomId).update({
+      'challengeActive': true,
+      'challengeEndTime': Timestamp.fromDate(endTime),
+      'challengeGiftTotal': 0,  // إعادة ضبط عداد الهدايا عند كل تحدي جديد
+    });
+  }
+
+  Future<void> deactivateChallenge(String roomId) async {
+    await _db.collection('rooms').doc(roomId).update({
+      'challengeActive': false,
+      'challengeEndTime': FieldValue.delete(),
+    });
+  }
 }

@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/seat_model.dart';
@@ -183,4 +184,47 @@ final chatMutedProvider = StreamProvider.family<bool, String>((ref, key) {
   final idx = key.indexOf('::');
   if (idx < 0) return const Stream.empty();
   return RoomStateRepository().isChatMutedStream(key.substring(0, idx), key.substring(idx + 2));
+});
+
+// ── مجموع ماسات المستخدم المستلمة (للشريط تحت اسم المقعد) ────────
+// يستخدم totalGiftDiamonds إن وجد، وإلا يرجع لـ diamonds كاحتياط
+final userGiftDiamondsProvider = StreamProvider.family<int, String>((ref, userId) {
+  if (userId.isEmpty) return const Stream.empty();
+  return FirebaseFirestore.instance
+      .collection('users')
+      .doc(userId)
+      .snapshots()
+      .map((doc) {
+        final data = doc.data();
+        if (data == null) return 0;
+        final total = (data['totalGiftDiamonds'] as num?)?.toInt();
+        if (total != null && total > 0) return total;
+        return (data['diamonds'] as num?)?.toInt() ?? 0;
+      });
+});
+
+// ── إجمالي ماسات الهدايا خلال التحدي ────────────────────────────────
+final challengeGiftTotalProvider = StreamProvider.family<int, String>((ref, roomId) {
+  return FirebaseFirestore.instance
+      .collection('rooms')
+      .doc(roomId)
+      .snapshots()
+      .map((doc) {
+        if (doc.data()?['challengeActive'] != true) return 0;
+        return (doc.data()?['challengeGiftTotal'] as num?)?.toInt() ?? 0;
+      });
+});
+
+// ── وقت انتهاء التحدي (null = لا يوجد تحدي نشط) ───────────────────
+final challengeEndTimeProvider = StreamProvider.family<DateTime?, String>((ref, roomId) {
+  return FirebaseFirestore.instance
+      .collection('rooms')
+      .doc(roomId)
+      .snapshots()
+      .map((doc) {
+        final data = doc.data();
+        if (data == null || data['challengeActive'] != true) return null;
+        final ts = data['challengeEndTime'] as Timestamp?;
+        return ts?.toDate();
+      });
 });

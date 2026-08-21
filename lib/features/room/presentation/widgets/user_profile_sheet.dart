@@ -132,7 +132,12 @@ class _UserProfileSheetState extends ConsumerState<UserProfileSheet> {
                           context: context,
                           backgroundColor: Colors.transparent,
                           isScrollControlled: true,
-                          builder: (_) => GiftPanel(targetUserId: widget.targetUserId, targetUserName: widget.targetUserName),
+                          builder: (_) => GiftPanel(
+                            targetUserId: widget.targetUserId,
+                            targetUserName: widget.targetUserName,
+                            targetUserAvatar: widget.targetUserAvatar,
+                            roomId: widget.roomId,
+                          ),
                         );
                       },
                     ),
