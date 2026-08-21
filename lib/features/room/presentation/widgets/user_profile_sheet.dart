@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../data/repositories/room_state_repository.dart';
 import '../providers/room_provider.dart';
@@ -129,9 +130,8 @@ class _UserProfileSheetState extends ConsumerState<UserProfileSheet> {
                         Navigator.pop(context);
                         showModalBottomSheet(
                           context: context,
-                          backgroundColor: AppColors.surface,
+                          backgroundColor: Colors.transparent,
                           isScrollControlled: true,
-                          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
                           builder: (_) => GiftPanel(targetUserId: widget.targetUserId, targetUserName: widget.targetUserName),
                         );
                       },
@@ -393,6 +393,219 @@ class _ControlBtn extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── ملف الشخصي للمستخدم الحالي (داخل الغرفة) ───────────────────
+class MyProfileSheet extends ConsumerStatefulWidget {
+  const MyProfileSheet({
+    super.key,
+    required this.userId,
+    required this.userName,
+    this.userAvatar,
+    required this.onLeaveSeat,
+    required this.onSendEmoji,
+  });
+
+  final String userId;
+  final String userName;
+  final String? userAvatar;
+  final VoidCallback onLeaveSeat;
+  final void Function(String emoji) onSendEmoji;
+
+  @override
+  ConsumerState<MyProfileSheet> createState() => _MyProfileSheetState();
+}
+
+class _MyProfileSheetState extends ConsumerState<MyProfileSheet> {
+  int _followersCount = 0;
+  int _friendsCount = 0;
+  bool _loadingStats = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchStats();
+  }
+
+  Future<void> _fetchStats() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.userId)
+          .get();
+      if (!mounted) return;
+      final data = doc.data() ?? {};
+      setState(() {
+        _followersCount = data['followersCount'] ?? 0;
+        _friendsCount = data['friendsCount'] ?? 0;
+        _loadingStats = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingStats = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A0A2E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.only(
+        left: 20, right: 20, top: 12,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 20),
+
+          // صورة + اسم
+          _buildAvatar(),
+          const SizedBox(height: 10),
+          Text(
+            widget.userName,
+            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, fontFamily: 'Cairo'),
+          ),
+
+          const SizedBox(height: 20),
+
+          // ايموجيات التفاعل (صف واحد × 4 + صف ثاني × 4)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(15),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                _EmojiRow(
+                  emojis: const ['😂', '😢', '😠', '😊'],
+                  onSend: widget.onSendEmoji,
+                ),
+                const SizedBox(height: 10),
+                _EmojiRow(
+                  emojis: const ['😍', '😮', '😘', '😘←'],
+                  onSend: widget.onSendEmoji,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // متابعون + أصدقاء
+          if (_loadingStats)
+            const SizedBox(height: 36, child: Center(child: CircularProgressIndicator(color: Colors.white38, strokeWidth: 2)))
+          else
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _ProfileStat('متابعون', _followersCount),
+                Container(width: 1, height: 40, color: Colors.white12),
+                _ProfileStat('أصدقاء', _friendsCount),
+              ],
+            ),
+
+          const SizedBox(height: 24),
+
+          // زر النزول من المايك
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                widget.onLeaveSeat();
+              },
+              icon: const Icon(Icons.mic_off_rounded, color: Colors.white, size: 18),
+              label: const Text('نزول من المايك', style: TextStyle(color: Colors.white, fontSize: 15, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvatar() {
+    final url = widget.userAvatar;
+    return Container(
+      width: 84, height: 84,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.primary, width: 2.5),
+      ),
+      child: ClipOval(
+        child: url != null
+            ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover)
+            : Container(
+                color: AppColors.primary.withAlpha(60),
+                child: Center(
+                  child: Text(
+                    widget.userName.isNotEmpty ? widget.userName[0].toUpperCase() : '؟',
+                    style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _EmojiRow extends StatelessWidget {
+  const _EmojiRow({required this.emojis, required this.onSend});
+  final List<String> emojis;
+  final void Function(String) onSend;
+
+  Widget _emojiWidget(String e) {
+    final isFlipped = e.endsWith('←');
+    final raw = isFlipped ? e.replaceAll('←', '') : e;
+    final text = Text(raw, style: const TextStyle(fontSize: 30));
+    if (isFlipped) {
+      return Transform.scale(scaleX: -1.0, child: text);
+    }
+    return text;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: emojis.map((e) =>
+        GestureDetector(
+          onTap: () {
+            onSend(e);
+            HapticFeedback.lightImpact();
+          },
+          child: _emojiWidget(e),
+        ),
+      ).toList(),
+    );
+  }
+}
+
+class _ProfileStat extends StatelessWidget {
+  const _ProfileStat(this.label, this.value);
+  final String label;
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text('$value', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, fontFamily: 'Cairo')),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12, fontFamily: 'Cairo')),
+      ],
     );
   }
 }

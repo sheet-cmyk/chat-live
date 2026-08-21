@@ -45,7 +45,11 @@ service cloud.firestore {
         || isOwner(userId)
         || (isSignedIn() && request.auth.uid == userId
             && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['isOnline', 'lastSeen', 'fcmToken']));
+               .hasOnly(['isOnline', 'lastSeen', 'fcmToken']))
+        // هدايا: يسمح لأي مستخدم مسجّل بزيادة حقل diamonds فقط (لا خصم)
+        || (isSignedIn()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['diamonds'])
+            && request.resource.data.get('diamonds', 0) > resource.data.get('diamonds', 0));
       allow delete: if false;
 
       // إشعارات المستخدم

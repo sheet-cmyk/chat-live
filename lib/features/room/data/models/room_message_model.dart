@@ -1,4 +1,4 @@
-enum MessageType { text, system, gift, join, leave }
+enum MessageType { text, system, gift, join, leave, emoji }
 
 class RoomMessageModel {
   final String id;

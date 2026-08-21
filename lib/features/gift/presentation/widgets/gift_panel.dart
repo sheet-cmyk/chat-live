@@ -1,11 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../../../app/theme/app_colors.dart';
 import '../../data/models/gift_model.dart';
 import '../providers/gift_provider.dart';
 import '../../../wallet/presentation/providers/wallet_provider.dart';
 import '../../../room/presentation/providers/room_provider.dart';
+
+// ── ألوان TikTok الداكنة ──────────────────────────────────────────────────
+const _kBg         = Color(0xFF161625);
+const _kCard       = Color(0xFF222238);
+const _kCardSel    = Color(0xFFFF4D6D);   // وردي TikTok
+const _kQtyChip    = Color(0xFF2A2A44);
+const _kPriceClr   = Color(0xFF4CF0FF);  // أزرق فاتح للسعر
+
+// ── مساعد تنسيق الأرقام ──────────────────────────────────────────────────
+String _fmt(int n) {
+  if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+  if (n >= 1000)    return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K';
+  return '$n';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  GiftPanel
+// ═══════════════════════════════════════════════════════════════════════════
 
 class GiftPanel extends ConsumerStatefulWidget {
   const GiftPanel({super.key, this.targetUserId, this.targetUserName});
@@ -17,153 +35,253 @@ class GiftPanel extends ConsumerStatefulWidget {
 }
 
 class _GiftPanelState extends ConsumerState<GiftPanel> {
+  int _quantity = 1;
+
   @override
   Widget build(BuildContext context) {
-    final gifts = ref.watch(giftsProvider);
-    final selectedGift = ref.watch(selectedGiftProvider);
-    final category = ref.watch(selectedGiftCategoryProvider);
-    final coins = ref.watch(coinsProvider);
-    final sending = ref.watch(sendingGiftProvider);
+    final gifts       = ref.watch(giftsProvider);
+    final selected    = ref.watch(selectedGiftProvider);
+    final category    = ref.watch(selectedGiftCategoryProvider);
+    final coins       = ref.watch(coinsProvider);
+    final sending     = ref.watch(sendingGiftProvider);
+    final totalCost   = (selected?.coinPrice ?? 0) * _quantity;
+    final canAfford   = coins >= totalCost;
 
-    return SizedBox(
-      height: 420,
+    return Container(
+      decoration: const BoxDecoration(
+        color: _kBg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // مقبض السحب
-          Padding(
-            padding: const EdgeInsets.only(top: 12, bottom: 8),
-            child: Center(
-              child: Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.divider,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+          // ── مقبض ─────────────────────────────────────────────
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 8),
+              width: 38, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
 
-          // الترويسة: عنوان + رصيد
+          // ── رأس: عنوان + رصيد ────────────────────────────────
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
             child: Row(
               children: [
-                const Text('الهدايا', style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'Cairo',
-                )),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceLight,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('🪙', style: TextStyle(fontSize: 14)),
-                      const SizedBox(width: 4),
-                      Text('$coins', style: const TextStyle(
-                        color: AppColors.gold,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'Cairo',
-                        fontSize: 13,
-                      )),
-                    ],
+                const Text(
+                  'الهدايا',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Cairo',
                   ),
                 ),
+                const Spacer(),
+                _BalanceChip(coins: coins),
               ],
             ),
           ),
 
-          // تبويبات الفئات
-          const SizedBox(height: 8),
-          _CategoryTabs(),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
 
-          // شبكة الهدايا
-          Expanded(
+          // ── تبويبات الفئات ────────────────────────────────────
+          _CategoryTabs(onChanged: () {
+            ref.read(selectedGiftProvider.notifier).state = null;
+            setState(() => _quantity = 1);
+          }),
+
+          const SizedBox(height: 10),
+
+          // ── شبكة الهدايا ──────────────────────────────────────
+          SizedBox(
+            height: 280,
             child: gifts.when(
-              loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-              error: (_, __) => const Center(child: Text('خطأ في تحميل الهدايا', style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo'))),
+              loading: () => const Center(
+                child: CircularProgressIndicator(color: _kCardSel, strokeWidth: 2),
+              ),
+              error: (_, __) => const Center(
+                child: Text(
+                  'خطأ في التحميل',
+                  style: TextStyle(color: Colors.white38, fontFamily: 'Cairo'),
+                ),
+              ),
               data: (list) {
                 final filtered = category == GiftCategory.popular
                     ? list
                     : list.where((g) => g.category == category).toList();
                 return GridView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 4,
                     mainAxisSpacing: 8,
                     crossAxisSpacing: 8,
-                    childAspectRatio: 0.85,
+                    childAspectRatio: 0.8,
                   ),
                   itemCount: filtered.length,
-                  itemBuilder: (_, i) => _GiftItem(
-                    gift: filtered[i],
-                    isSelected: selectedGift?.id == filtered[i].id,
-                    onTap: () => ref.read(selectedGiftProvider.notifier).state = filtered[i],
-                  ),
+                  itemBuilder: (_, i) {
+                    final g = filtered[i];
+                    return _GiftCard(
+                      gift: g,
+                      isSelected: selected?.id == g.id,
+                      onTap: () {
+                        ref.read(selectedGiftProvider.notifier).state = g;
+                        setState(() => _quantity = 1);
+                        HapticFeedback.selectionClick();
+                      },
+                    );
+                  },
                 );
               },
             ),
           ),
 
-          // زر الإرسال
-          if (selectedGift != null)
-            Padding(
-              padding: EdgeInsets.only(
-                left: 16, right: 16, bottom: MediaQuery.of(context).viewInsets.bottom + 12,
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                height: 46,
-                child: ElevatedButton(
-                  onPressed: sending ? null : () => _sendGift(selectedGift),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: sending
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Text(
-                          'إرسال ${selectedGift.emoji} · ${selectedGift.coinPrice} 🪙',
-                          style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w700),
+          // ── شريط الكمية + زر الإرسال (يظهر عند اختيار هدية) ──
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            child: selected != null
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _QuantityStrip(
+                        quantity: _quantity,
+                        onPick: (q) => setState(() => _quantity = q),
+                        onCustom: _openCustomQty,
+                      ),
+                      Padding(
+                        padding: EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          top: 8,
+                          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
                         ),
-                ),
-              ),
-            ),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: (sending || !canAfford)
+                                ? null
+                                : () => _doSend(selected),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: canAfford
+                                  ? _kCardSel
+                                  : const Color(0xFF444455),
+                              disabledBackgroundColor: const Color(0xFF333344),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              elevation: canAfford ? 6 : 0,
+                              shadowColor: _kCardSel.withAlpha(120),
+                            ),
+                            child: sending
+                                ? const SizedBox(
+                                    width: 22, height: 22,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2.5,
+                                    ),
+                                  )
+                                : Text(
+                                    canAfford
+                                        ? 'إرسال ${selected.emoji}  💎 ${_fmt(totalCost)}'
+                                        : 'رصيدك غير كافٍ',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontFamily: 'Cairo',
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : SizedBox(
+                    height: MediaQuery.of(context).viewInsets.bottom + 16,
+                  ),
+          ),
         ],
       ),
     );
   }
 
-  Future<void> _sendGift(GiftModel gift) async {
-    final me = FirebaseAuth.instance.currentUser;
-    if (me == null) return;
-    final room = ref.read(currentRoomProvider);
-    if (room == null) return;
-
-    final coins = ref.read(coinsProvider);
-    if (coins < gift.coinPrice) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('رصيدك غير كافٍ! اشحن محفظتك', style: TextStyle(fontFamily: 'Cairo')),
-            backgroundColor: AppColors.error,
+  // ── إدخال كمية مخصصة ─────────────────────────────────────────────────────
+  Future<void> _openCustomQty() async {
+    final ctrl = TextEditingController();
+    final result = await showDialog<int>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF222238),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text(
+          'عدد الهدايا',
+          style: TextStyle(
+            color: Colors.white, fontFamily: 'Cairo', fontSize: 15,
           ),
-        );
-      }
-      return;
+        ),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          style: const TextStyle(
+            color: Colors.white, fontFamily: 'Cairo', fontSize: 18,
+          ),
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          textAlign: TextAlign.center,
+          decoration: const InputDecoration(
+            hintText: 'مثال: 50',
+            hintStyle: TextStyle(color: Colors.white30, fontFamily: 'Cairo'),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: Colors.white24),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: _kCardSel, width: 2),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'إلغاء',
+              style: TextStyle(color: Colors.white38, fontFamily: 'Cairo'),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              final v = int.tryParse(ctrl.text) ?? 0;
+              if (v > 0) Navigator.pop(context, v);
+            },
+            child: const Text(
+              'تأكيد',
+              style: TextStyle(
+                color: _kCardSel, fontFamily: 'Cairo',
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() => _quantity = result.clamp(1, 9999));
     }
+  }
+
+  // ── إرسال الهدية ─────────────────────────────────────────────────────────
+  Future<void> _doSend(GiftModel gift) async {
+    final me   = FirebaseAuth.instance.currentUser;
+    final room = ref.read(currentRoomProvider);
+    if (me == null || room == null) return;
 
     ref.read(sendingGiftProvider.notifier).state = true;
     try {
-      final repo = ref.read(giftRepositoryProvider);
-      final ok = await repo.sendGift(
+      final ok = await ref.read(giftRepositoryProvider).sendGift(
         roomId: room.roomId,
         senderId: me.uid,
         senderName: me.displayName ?? 'مستخدم',
@@ -171,25 +289,28 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
         receiverId: widget.targetUserId,
         receiverName: widget.targetUserName,
         gift: gift,
+        quantity: _quantity,
       );
 
       if (ok && mounted) {
-        // أرسل رسالة الهدية للدردشة — يراها جميع الأعضاء ويُفعّل الأنيميشن لديهم
+        final suffix = _quantity > 1 ? ' x$_quantity' : '';
         await ref.read(chatWriterProvider(room.roomId)).sendGift(
           senderId: me.uid,
           senderName: me.displayName ?? 'مستخدم',
           senderAvatar: me.photoURL,
           receiverName: widget.targetUserName,
           giftEmoji: gift.emoji,
-          giftName: gift.name,
+          giftName: '${gift.name}$suffix',
         );
-
         if (mounted) Navigator.of(context).pop();
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('فشل إرسال الهدية', style: TextStyle(fontFamily: 'Cairo')),
-            backgroundColor: AppColors.error,
+            content: Text(
+              'رصيدك غير كافٍ أو فشل الإرسال',
+              style: TextStyle(fontFamily: 'Cairo'),
+            ),
+            backgroundColor: Colors.redAccent,
           ),
         );
       }
@@ -199,43 +320,110 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
   }
 }
 
-// تبويبات الفئات
+// ═══════════════════════════════════════════════════════════════════════════
+//  _BalanceChip — رصيد الماسات
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _BalanceChip extends StatelessWidget {
+  const _BalanceChip({required this.coins});
+  final int coins;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('💎', style: TextStyle(fontSize: 13)),
+          const SizedBox(width: 5),
+          Text(
+            _fmt(coins),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Cairo',
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: _kCardSel.withAlpha(40),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Text(
+              'شحن',
+              style: TextStyle(
+                color: _kCardSel, fontSize: 10,
+                fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  _CategoryTabs
+// ═══════════════════════════════════════════════════════════════════════════
+
 class _CategoryTabs extends ConsumerWidget {
+  const _CategoryTabs({required this.onChanged});
+  final VoidCallback onChanged;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedGiftCategoryProvider);
-    final categories = [
-      (GiftCategory.popular, 'الكل'),
-      (GiftCategory.love, 'حب 💕'),
-      (GiftCategory.special, 'مميز ✨'),
-      (GiftCategory.luxury, 'فاخر 💎'),
+    const cats = [
+      (GiftCategory.popular, '🎁 الكل'),
+      (GiftCategory.love,    '💕 حب'),
+      (GiftCategory.special, '✨ مميز'),
+      (GiftCategory.luxury,  '👑 فاخر'),
     ];
     return SizedBox(
-      height: 32,
+      height: 34,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        itemCount: categories.length,
+        itemCount: cats.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
-          final (cat, label) = categories[i];
-          final isActive = selected == cat;
+          final (cat, label) = cats[i];
+          final active = selected == cat;
           return GestureDetector(
-            onTap: () => ref.read(selectedGiftCategoryProvider.notifier).state = cat,
+            onTap: () {
+              ref.read(selectedGiftCategoryProvider.notifier).state = cat;
+              onChanged();
+            },
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: isActive ? AppColors.primary : AppColors.surfaceLight,
-                borderRadius: BorderRadius.circular(16),
+                color: active ? _kCardSel : const Color(0xFF252542),
+                borderRadius: BorderRadius.circular(17),
+                border: Border.all(
+                  color: active ? _kCardSel : Colors.white12,
+                ),
               ),
               alignment: Alignment.center,
-              child: Text(label, style: TextStyle(
-                color: isActive ? Colors.white : AppColors.textSecondary,
-                fontSize: 12,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.normal,
-                fontFamily: 'Cairo',
-              )),
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: active ? Colors.white : Colors.white54,
+                  fontSize: 12,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.normal,
+                  fontFamily: 'Cairo',
+                ),
+              ),
             ),
           );
         },
@@ -244,9 +432,16 @@ class _CategoryTabs extends ConsumerWidget {
   }
 }
 
-// بطاقة هدية واحدة
-class _GiftItem extends StatelessWidget {
-  const _GiftItem({required this.gift, required this.isSelected, required this.onTap});
+// ═══════════════════════════════════════════════════════════════════════════
+//  _GiftCard — بطاقة هدية واحدة
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _GiftCard extends StatelessWidget {
+  const _GiftCard({
+    required this.gift,
+    required this.isSelected,
+    required this.onTap,
+  });
   final GiftModel gift;
   final bool isSelected;
   final VoidCallback onTap;
@@ -256,39 +451,184 @@ class _GiftItem extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withAlpha(40) : AppColors.surfaceLight,
+          color: isSelected ? _kCardSel.withAlpha(28) : _kCard,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppColors.primary : Colors.transparent,
+            color: isSelected ? _kCardSel : Colors.white12,
             width: 1.5,
           ),
+          boxShadow: isSelected
+              ? [BoxShadow(color: _kCardSel.withAlpha(70), blurRadius: 10)]
+              : null,
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Stack(
           children: [
-            Text(gift.emoji, style: const TextStyle(fontSize: 28)),
-            const SizedBox(height: 4),
-            Text(gift.name, style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 11,
-              fontFamily: 'Cairo',
-            )),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('🪙', style: TextStyle(fontSize: 10)),
-                const SizedBox(width: 2),
-                Text('${gift.coinPrice}', style: const TextStyle(
-                  color: AppColors.gold,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                )),
-              ],
+            // SPECIAL badge — أعلى اليسار
+            if (gift.isSpecial)
+              Positioned(
+                top: 4, left: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF7B00), Color(0xFFFFD000)],
+                    ),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: const Text(
+                    'SPECIAL',
+                    style: TextStyle(
+                      color: Colors.white, fontSize: 6,
+                      fontWeight: FontWeight.w800, letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+
+            // المحتوى الرئيسي
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // الإيموجي
+                  Text(
+                    gift.emoji,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: gift.isSpecial ? 32 : 30,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // الاسم
+                  Text(
+                    gift.name,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+
+                  // السعر بالماسات
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('💎', style: TextStyle(fontSize: 9)),
+                      const SizedBox(width: 2),
+                      Text(
+                        _fmt(gift.coinPrice),
+                        style: const TextStyle(
+                          color: _kPriceClr,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  _QuantityStrip — شريط الكمية x1 … x9 … ···
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _QuantityStrip extends StatelessWidget {
+  const _QuantityStrip({
+    required this.quantity,
+    required this.onPick,
+    required this.onCustom,
+  });
+  final int quantity;
+  final void Function(int) onPick;
+  final VoidCallback onCustom;
+
+  @override
+  Widget build(BuildContext context) {
+    final isCustom = quantity > 9;
+    return Container(
+      height: 48,
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Colors.white10),
+          bottom: BorderSide(color: Colors.white10),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          // أرقام x1 - x9
+          ...List.generate(9, (i) {
+            final q = i + 1;
+            final sel = quantity == q;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  onPick(q);
+                  HapticFeedback.selectionClick();
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: sel ? _kCardSel : _kQtyChip,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'x$q',
+                    style: TextStyle(
+                      color: sel ? Colors.white : Colors.white54,
+                      fontSize: 10,
+                      fontWeight: sel ? FontWeight.w700 : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+
+          // زر ··· (مخصص)
+          Expanded(
+            child: GestureDetector(
+              onTap: onCustom,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 140),
+                margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 9),
+                decoration: BoxDecoration(
+                  color: isCustom ? _kCardSel : _kQtyChip,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  isCustom ? 'x$quantity' : '···',
+                  style: TextStyle(
+                    color: isCustom ? Colors.white : Colors.white54,
+                    fontSize: isCustom ? 9 : 12,
+                    fontWeight: isCustom ? FontWeight.w700 : FontWeight.normal,
+                    letterSpacing: isCustom ? 0 : 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

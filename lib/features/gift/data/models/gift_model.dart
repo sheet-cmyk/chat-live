@@ -6,8 +6,8 @@ class GiftModel {
   final String id;
   final String name;
   final String emoji;
-  final int coinPrice;
-  final int diamondValue;
+  final int coinPrice;      // ماسات يدفعها المرسل
+  final int diamondValue;   // ماسات يستقبلها المستقبل
   final GiftCategory category;
   final String? animationUrl;
   final bool isSpecial;
@@ -50,21 +50,42 @@ class GiftModel {
     'isSpecial': isSpecial,
   };
 
-  static List<GiftModel> defaultGifts() => [
-    const GiftModel(id: 'rose', name: 'وردة', emoji: '🌹', coinPrice: 10, diamondValue: 1, category: GiftCategory.popular),
-    const GiftModel(id: 'heart', name: 'قلب', emoji: '❤️', coinPrice: 20, diamondValue: 2, category: GiftCategory.popular),
-    const GiftModel(id: 'star', name: 'نجمة', emoji: '⭐', coinPrice: 50, diamondValue: 5, category: GiftCategory.popular),
-    const GiftModel(id: 'cake', name: 'كعكة', emoji: '🎂', coinPrice: 100, diamondValue: 10, category: GiftCategory.special),
-    const GiftModel(id: 'crown', name: 'تاج', emoji: '👑', coinPrice: 200, diamondValue: 20, category: GiftCategory.special),
-    const GiftModel(id: 'diamond', name: 'ماسة', emoji: '💎', coinPrice: 500, diamondValue: 50, category: GiftCategory.luxury),
-    const GiftModel(id: 'rocket', name: 'صاروخ', emoji: '🚀', coinPrice: 1000, diamondValue: 100, category: GiftCategory.luxury, isSpecial: true),
-    const GiftModel(id: 'ring', name: 'خاتم', emoji: '💍', coinPrice: 2000, diamondValue: 200, category: GiftCategory.love, isSpecial: true),
-    const GiftModel(id: 'bouquet', name: 'باقة', emoji: '💐', coinPrice: 30, diamondValue: 3, category: GiftCategory.love),
-    const GiftModel(id: 'teddy', name: 'دبدوب', emoji: '🧸', coinPrice: 80, diamondValue: 8, category: GiftCategory.love),
-    const GiftModel(id: 'fire', name: 'نار', emoji: '🔥', coinPrice: 150, diamondValue: 15, category: GiftCategory.special),
-    const GiftModel(id: 'unicorn', name: 'يونيكورن', emoji: '🦄', coinPrice: 999, diamondValue: 99, category: GiftCategory.luxury, isSpecial: true),
+  // ── هدايا افتراضية بأسعار ماسات من 10 إلى 50,000 ──────────────────────
+  static List<GiftModel> defaultGifts() => const [
+    // ── الكل / شائع ─────────────────────── 10 - 99 ماسة ──
+    GiftModel(id: 'rose',     name: 'وردة',       emoji: '🌹', coinPrice: 10,  diamondValue: 10,  category: GiftCategory.popular),
+    GiftModel(id: 'kiss',     name: 'بوسة',       emoji: '💋', coinPrice: 15,  diamondValue: 15,  category: GiftCategory.popular),
+    GiftModel(id: 'heart',    name: 'قلب',        emoji: '❤️', coinPrice: 20,  diamondValue: 20,  category: GiftCategory.popular),
+    GiftModel(id: 'balloon',  name: 'بالون',      emoji: '🎈', coinPrice: 25,  diamondValue: 25,  category: GiftCategory.popular),
+    GiftModel(id: 'star',     name: 'نجمة',       emoji: '⭐', coinPrice: 30,  diamondValue: 30,  category: GiftCategory.popular),
+    GiftModel(id: 'bear',     name: 'دبدوب',      emoji: '🧸', coinPrice: 49,  diamondValue: 49,  category: GiftCategory.popular),
+    GiftModel(id: 'fire',     name: 'نار',        emoji: '🔥', coinPrice: 69,  diamondValue: 69,  category: GiftCategory.popular),
+    GiftModel(id: 'bouquet',  name: 'باقة',       emoji: '💐', coinPrice: 99,  diamondValue: 99,  category: GiftCategory.popular),
+
+    // ── حب ──────────────────────────────── 30 - 1000 ماسة ──
+    GiftModel(id: 'gold_heart', name: 'قلب ذهبي', emoji: '💛', coinPrice: 30,   diamondValue: 30,   category: GiftCategory.love),
+    GiftModel(id: 'couple',     name: 'عشاق',     emoji: '👫', coinPrice: 100,  diamondValue: 100,  category: GiftCategory.love),
+    GiftModel(id: 'wedding',    name: 'زفاف',     emoji: '💒', coinPrice: 500,  diamondValue: 500,  category: GiftCategory.love, isSpecial: true),
+    GiftModel(id: 'infinity',   name: 'إلى الأبد',emoji: '♾️', coinPrice: 1000, diamondValue: 1000, category: GiftCategory.love, isSpecial: true),
+
+    // ── مميز ────────────────────────────── 100 - 999 ماسة ──
+    GiftModel(id: 'cake',    name: 'كعكة',      emoji: '🎂', coinPrice: 100, diamondValue: 100, category: GiftCategory.special),
+    GiftModel(id: 'music',   name: 'موسيقى',    emoji: '🎵', coinPrice: 150, diamondValue: 150, category: GiftCategory.special),
+    GiftModel(id: 'crown',   name: 'تاج',       emoji: '👑', coinPrice: 199, diamondValue: 199, category: GiftCategory.special),
+    GiftModel(id: 'diamond', name: 'ماسة',      emoji: '💎', coinPrice: 299, diamondValue: 299, category: GiftCategory.special),
+    GiftModel(id: 'unicorn', name: 'يونيكورن',  emoji: '🦄', coinPrice: 499, diamondValue: 499, category: GiftCategory.special, isSpecial: true),
+    GiftModel(id: 'ring',    name: 'خاتم',      emoji: '💍', coinPrice: 699, diamondValue: 699, category: GiftCategory.special, isSpecial: true),
+
+    // ── فاخر ────────────────────────────── 1,000 - 50,000 ماسة ──
+    GiftModel(id: 'rocket',   name: 'صاروخ',  emoji: '🚀', coinPrice: 1000,  diamondValue: 1000,  category: GiftCategory.luxury, isSpecial: true),
+    GiftModel(id: 'car',      name: 'سيارة',  emoji: '🏎️', coinPrice: 2000,  diamondValue: 2000,  category: GiftCategory.luxury, isSpecial: true),
+    GiftModel(id: 'yacht',    name: 'يخت',    emoji: '⛵',  coinPrice: 5000,  diamondValue: 5000,  category: GiftCategory.luxury, isSpecial: true),
+    GiftModel(id: 'castle',   name: 'قصر',    emoji: '🏰', coinPrice: 10000, diamondValue: 10000, category: GiftCategory.luxury, isSpecial: true),
+    GiftModel(id: 'universe', name: 'الكون',  emoji: '🌌', coinPrice: 50000, diamondValue: 50000, category: GiftCategory.luxury, isSpecial: true),
   ];
 }
+
+// ── سجل الهدية المرسلة ────────────────────────────────────────────────────
 
 class GiftSentRecord {
   final String id;
@@ -79,6 +100,8 @@ class GiftSentRecord {
   final String giftEmoji;
   final int coinPrice;
   final int diamondValue;
+  final int quantity;
+  final bool isSpecial;
   final DateTime sentAt;
 
   const GiftSentRecord({
@@ -94,6 +117,8 @@ class GiftSentRecord {
     required this.giftEmoji,
     required this.coinPrice,
     required this.diamondValue,
+    this.quantity = 1,
+    this.isSpecial = false,
     required this.sentAt,
   });
 
@@ -112,6 +137,8 @@ class GiftSentRecord {
       giftEmoji: d['giftEmoji'] ?? '🎁',
       coinPrice: (d['coinPrice'] as num?)?.toInt() ?? 0,
       diamondValue: (d['diamondValue'] as num?)?.toInt() ?? 0,
+      quantity: (d['quantity'] as num?)?.toInt() ?? 1,
+      isSpecial: d['isSpecial'] ?? false,
       sentAt: (d['sentAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
@@ -128,6 +155,8 @@ class GiftSentRecord {
     'giftEmoji': giftEmoji,
     'coinPrice': coinPrice,
     'diamondValue': diamondValue,
+    'quantity': quantity,
+    'isSpecial': isSpecial,
     'sentAt': FieldValue.serverTimestamp(),
   };
 }

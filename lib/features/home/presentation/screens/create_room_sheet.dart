@@ -1,6 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../data/models/room_model.dart';
 import '../providers/home_provider.dart';
@@ -195,6 +199,8 @@ class _EditRoomSheetState extends ConsumerState<EditRoomSheet> {
   late RoomType _selectedType;
   late bool _isLocked;
   bool _isLoading = false;
+  String? _coverImageUrl;
+  Uint8List? _localBytes;
 
   @override
   void initState() {
@@ -202,6 +208,7 @@ class _EditRoomSheetState extends ConsumerState<EditRoomSheet> {
     _nameCtrl = TextEditingController(text: widget.room.name);
     _selectedType = widget.room.type;
     _isLocked = widget.room.isLocked;
+    _coverImageUrl = widget.room.coverImage;
   }
 
   @override
@@ -210,15 +217,30 @@ class _EditRoomSheetState extends ConsumerState<EditRoomSheet> {
     super.dispose();
   }
 
+  Future<void> _pickCover() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (picked == null || !mounted) return;
+    final bytes = await picked.readAsBytes();
+    setState(() => _localBytes = bytes);
+  }
+
   Future<void> _save() async {
     if (_nameCtrl.text.trim().isEmpty) return;
     setState(() => _isLoading = true);
     try {
+      String? finalCoverUrl = _coverImageUrl;
+      if (_localBytes != null) {
+        final storageRef = FirebaseStorage.instance
+            .ref('room_covers/${widget.room.roomId}/cover.jpg');
+        await storageRef.putData(_localBytes!, SettableMetadata(contentType: 'image/jpeg'));
+        finalCoverUrl = await storageRef.getDownloadURL();
+      }
       await ref.read(roomRepositoryProvider).updateRoom(
         widget.room.roomId,
         name: _nameCtrl.text.trim(),
         type: _selectedType,
         isLocked: _isLocked,
+        coverImage: finalCoverUrl,
       );
       if (mounted) Navigator.pop(context);
     } catch (_) {
@@ -230,6 +252,32 @@ class _EditRoomSheetState extends ConsumerState<EditRoomSheet> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Widget _buildCoverPreview() {
+    if (_localBytes != null) {
+      return Stack(fit: StackFit.expand, children: [
+        Image.memory(_localBytes!, fit: BoxFit.cover),
+        Positioned(
+          bottom: 8, right: 8,
+          child: _CoverEditBadge('تغيير'),
+        ),
+      ]);
+    }
+    if (_coverImageUrl != null) {
+      return Stack(fit: StackFit.expand, children: [
+        CachedNetworkImage(imageUrl: _coverImageUrl!, fit: BoxFit.cover),
+        Positioned(
+          bottom: 8, right: 8,
+          child: _CoverEditBadge('تغيير'),
+        ),
+      ]);
+    }
+    return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      const Icon(Icons.add_photo_alternate_rounded, size: 36, color: AppColors.primary),
+      const SizedBox(height: 8),
+      const Text('اضغط لاختيار صورة خلفية', style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 12)),
+    ]);
   }
 
   @override
@@ -253,7 +301,26 @@ class _EditRoomSheetState extends ConsumerState<EditRoomSheet> {
           const SizedBox(height: 16),
           const Text('تعديل الغرفة',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontFamily: 'Cairo')),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+
+          // صورة خلفية الغرفة
+          GestureDetector(
+            onTap: _isLoading ? null : _pickCover,
+            child: Container(
+              height: 130,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: AppColors.surfaceLight,
+                border: Border.all(color: AppColors.divider),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(13),
+                child: _buildCoverPreview(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           TextField(
             controller: _nameCtrl,
             style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo'),
@@ -335,6 +402,27 @@ class _EditRoomSheetState extends ConsumerState<EditRoomSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CoverEditBadge extends StatelessWidget {
+  const _CoverEditBadge(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black.withAlpha(160),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.edit_rounded, size: 12, color: Colors.white),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+      ]),
     );
   }
 }

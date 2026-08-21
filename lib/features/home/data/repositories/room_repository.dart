@@ -80,11 +80,13 @@ class RoomRepository {
     String? name,
     bool? isLocked,
     RoomType? type,
+    String? coverImage,
   }) async {
     final data = <String, dynamic>{};
     if (name != null) data['name'] = name;
     if (isLocked != null) data['isLocked'] = isLocked;
     if (type != null) data['type'] = type.name;
+    if (coverImage != null) data['coverImage'] = coverImage;
     if (data.isEmpty) return;
     await _col.doc(roomId).update(data);
   }

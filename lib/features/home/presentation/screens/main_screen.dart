@@ -86,16 +86,17 @@ class _CreateRoomFab extends ConsumerWidget {
     return GestureDetector(
       onTap: () => _onTap(context, ref),
       child: Container(
-        width: 58,
-        height: 58,
+        width: 64,
+        height: 64,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: AppColors.primaryGradient,
           boxShadow: [
-            BoxShadow(color: AppColors.primary.withAlpha(120), blurRadius: 16, spreadRadius: 2),
+            BoxShadow(color: AppColors.primary.withAlpha(100), blurRadius: 20, spreadRadius: 0, offset: const Offset(0, 8)),
+            BoxShadow(color: AppColors.accent.withAlpha(60), blurRadius: 12, spreadRadius: 0, offset: const Offset(0, 4)),
           ],
         ),
-        child: const Icon(Icons.add_rounded, color: Colors.white, size: 30),
+        child: const Icon(Icons.add_rounded, color: Colors.white, size: 32),
       ),
     );
   }
@@ -236,12 +237,12 @@ class _BottomNav extends ConsumerWidget {
     final unread = ref.watch(totalUnreadProvider);
 
     return Container(
-      height: 70,
+      height: 72,
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: const Border(top: BorderSide(color: AppColors.divider)),
+        color: Colors.white,
+        border: Border(top: BorderSide(color: const Color(0xFF3C4043).withAlpha(18))),
         boxShadow: [
-          BoxShadow(color: Colors.black.withAlpha(60), blurRadius: 12, offset: const Offset(0, -4)),
+          BoxShadow(color: const Color(0xFF3C4043).withAlpha(18), blurRadius: 16, offset: const Offset(0, -4)),
         ],
       ),
       child: Row(

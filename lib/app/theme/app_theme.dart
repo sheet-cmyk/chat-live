@@ -1,38 +1,44 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'app_colors.dart';
 
 class AppTheme {
   AppTheme._();
 
-  static ThemeData get darkTheme {
+  static ThemeData get lightTheme {
     return ThemeData(
-      brightness: Brightness.dark,
+      brightness: Brightness.light,
       useMaterial3: true,
       scaffoldBackgroundColor: AppColors.background,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
         secondary: AppColors.accent,
         surface: AppColors.surface,
         error: AppColors.error,
-        onPrimary: AppColors.textPrimary,
-        onSecondary: AppColors.textPrimary,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
         onSurface: AppColors.textPrimary,
       ),
       fontFamily: 'Cairo',
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.background,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: true,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarBrightness: Brightness.light,
+          statusBarIconBrightness: Brightness.dark,
+        ),
         titleTextStyle: TextStyle(
           color: AppColors.textPrimary,
           fontSize: 18,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           fontFamily: 'Cairo',
         ),
         iconTheme: IconThemeData(color: AppColors.textPrimary),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: AppColors.surface,
+        backgroundColor: Colors.white,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.textHint,
         type: BottomNavigationBarType.fixed,
@@ -41,16 +47,18 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: AppColors.card,
         elevation: 0,
+        shadowColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.textPrimary,
+          foregroundColor: Colors.white,
+          elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           textStyle: const TextStyle(
@@ -71,54 +79,48 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surfaceLight,
+        fillColor: AppColors.surface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppColors.divider),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
-        hintStyle: const TextStyle(
-          color: AppColors.textHint,
-          fontFamily: 'Cairo',
-        ),
-        labelStyle: const TextStyle(
-          color: AppColors.textSecondary,
-          fontFamily: 'Cairo',
-        ),
+        hintStyle: const TextStyle(color: AppColors.textHint, fontFamily: 'Cairo'),
+        labelStyle: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo'),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
       textTheme: const TextTheme(
-        displayLarge: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w700),
+        displayLarge:  TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w700),
         displayMedium: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w700),
-        displaySmall: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
+        displaySmall:  TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
         headlineLarge: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w700),
-        headlineMedium: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
+        headlineMedium:TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
         headlineSmall: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
-        titleLarge: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
-        titleMedium: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w500),
-        titleSmall: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontWeight: FontWeight.w500),
-        bodyLarge: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo'),
-        bodyMedium: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo'),
-        bodySmall: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo'),
-        labelLarge: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
+        titleLarge:    TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
+        titleMedium:   TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w500),
+        titleSmall:    TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontWeight: FontWeight.w500),
+        bodyLarge:     TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo'),
+        bodyMedium:    TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo'),
+        bodySmall:     TextStyle(color: AppColors.textHint, fontFamily: 'Cairo'),
+        labelLarge:    TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
       ),
-      dividerTheme: const DividerThemeData(
-        color: AppColors.divider,
-        thickness: 1,
-      ),
+      dividerTheme: const DividerThemeData(color: AppColors.divider, thickness: 1),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.surfaceLight,
-        contentTextStyle: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo'),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        backgroundColor: AppColors.textPrimary,
+        contentTextStyle: const TextStyle(color: Colors.white, fontFamily: 'Cairo'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
+
+  // Keep darkTheme as alias to avoid breaking other references
+  static ThemeData get darkTheme => lightTheme;
 }

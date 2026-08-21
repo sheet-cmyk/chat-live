@@ -54,20 +54,23 @@ class WalletRepository {
 
   Future<void> addDiamonds(String userId, int amount, String reason) async {
     try {
-      await _db.runTransaction((tx) async {
-        final ref = _db.collection('users').doc(userId);
-        tx.update(ref, {'diamonds': FieldValue.increment(amount)});
-        tx.set(
-          _db.collection('transactions').doc(),
-          TransactionModel(
-            id: '', userId: userId,
-            type: TransactionType.giftReceived,
-            coinsChange: 0, diamondsChange: amount,
-            description: reason,
-            createdAt: DateTime.now(),
-          ).toFirestore(),
-        );
-      });
+      // كتابتان منفصلتان — لا نستخدم transaction لأن المرسل يكتب على وثيقة شخص آخر
+      final batch = _db.batch();
+      batch.update(
+        _db.collection('users').doc(userId),
+        {'diamonds': FieldValue.increment(amount)},
+      );
+      batch.set(
+        _db.collection('transactions').doc(),
+        TransactionModel(
+          id: '', userId: userId,
+          type: TransactionType.giftReceived,
+          coinsChange: 0, diamondsChange: amount,
+          description: reason,
+          createdAt: DateTime.now(),
+        ).toFirestore(),
+      );
+      await batch.commit();
     } catch (e) {
       debugPrint('[Wallet] addDiamonds error: $e');
     }

@@ -12,47 +12,47 @@ class CategoryTabs extends ConsumerWidget {
     final selected = ref.watch(selectedCategoryProvider);
 
     final tabs = [
-      (null, 'الكل', Icons.apps_rounded),
-      (RoomType.chat, 'دردشة', Icons.chat_bubble_rounded),
-      (RoomType.music, 'موسيقى', Icons.music_note_rounded),
-      (RoomType.game, 'ألعاب', Icons.sports_esports_rounded),
-      (RoomType.dating, 'تعارف', Icons.favorite_rounded),
+      _TabData(null,           'الكل',    Icons.apps_rounded,           AppColors.blue,   const Color(0xFFE8F0FE)),
+      _TabData(RoomType.chat,  'دردشة',   Icons.chat_bubble_rounded,    AppColors.red,    const Color(0xFFFFEBEA)),
+      _TabData(RoomType.music, 'موسيقى',  Icons.music_note_rounded,     AppColors.yellow, const Color(0xFFFFF8E1)),
+      _TabData(RoomType.game,  'ألعاب',   Icons.sports_esports_rounded, AppColors.green,  const Color(0xFFE8F5E9)),
+      _TabData(RoomType.dating,'تعارف',   Icons.favorite_rounded,       AppColors.accent, const Color(0xFFFCE4EC)),
     ];
 
     return SizedBox(
-      height: 40,
+      height: 48,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: tabs.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
-          final (type, label, icon) = tabs[i];
-          final isActive = selected == type;
+          final tab = tabs[i];
+          final isActive = selected == tab.type;
           return GestureDetector(
-            onTap: () => ref.read(selectedCategoryProvider.notifier).state = type,
+            onTap: () => ref.read(selectedCategoryProvider.notifier).state = tab.type,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                gradient: isActive ? AppColors.primaryGradient : null,
-                color: isActive ? null : AppColors.surfaceLight,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isActive ? Colors.transparent : AppColors.divider,
-                ),
+                color: isActive ? tab.color : tab.lightColor,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: isActive
+                    ? [BoxShadow(color: tab.color.withAlpha(60), blurRadius: 8, offset: const Offset(0, 3))]
+                    : [],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, size: 14, color: isActive ? Colors.white : AppColors.textSecondary),
-                  const SizedBox(width: 5),
+                  Icon(tab.icon, size: 15,
+                    color: isActive ? Colors.white : tab.color),
+                  const SizedBox(width: 6),
                   Text(
-                    label,
+                    tab.label,
                     style: TextStyle(
-                      color: isActive ? Colors.white : AppColors.textSecondary,
-                      fontSize: 12,
-                      fontWeight: isActive ? FontWeight.w700 : FontWeight.normal,
+                      color: isActive ? Colors.white : tab.color,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                       fontFamily: 'Cairo',
                     ),
                   ),
@@ -64,4 +64,13 @@ class CategoryTabs extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _TabData {
+  const _TabData(this.type, this.label, this.icon, this.color, this.lightColor);
+  final RoomType? type;
+  final String label;
+  final IconData icon;
+  final Color color;
+  final Color lightColor;
 }

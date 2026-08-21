@@ -25,26 +25,31 @@ class GiftRepository {
     String? receiverId,
     String? receiverName,
     required GiftModel gift,
+    int quantity = 1,
   }) async {
     try {
-      // خصم العملات من المرسل
+      final totalCost = gift.coinPrice * quantity;
+      final totalDiamonds = gift.diamondValue * quantity;
+
       final success = await _wallet.deductCoins(
         senderId,
-        gift.coinPrice,
-        'إرسال هدية ${gift.name}',
+        totalCost,
+        quantity > 1
+            ? 'إرسال ${gift.name} x$quantity'
+            : 'إرسال هدية ${gift.name}',
       );
       if (!success) return false;
 
-      // إضافة الماسات للمستقبل إن وجد
       if (receiverId != null) {
         await _wallet.addDiamonds(
           receiverId,
-          gift.diamondValue,
-          'استقبال هدية ${gift.name}',
+          totalDiamonds,
+          quantity > 1
+              ? 'استقبال ${gift.name} x$quantity'
+              : 'استقبال هدية ${gift.name}',
         );
       }
 
-      // تسجيل الهدية — هذا اختياري؛ الأنيميشن يعتمد على تيار رسائل الغرفة
       try {
         await _db.collection('rooms').doc(roomId).collection('gifts').add(
           GiftSentRecord(
@@ -60,6 +65,8 @@ class GiftRepository {
             giftEmoji: gift.emoji,
             coinPrice: gift.coinPrice,
             diamondValue: gift.diamondValue,
+            quantity: quantity,
+            isSpecial: gift.isSpecial,
             sentAt: DateTime.now(),
           ).toFirestore(),
         );

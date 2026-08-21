@@ -1,14 +1,19 @@
+import 'dart:math' show pi, cos, sin;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../home/data/repositories/room_history_repository.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../data/models/seat_model.dart';
 import '../../../home/data/models/room_model.dart';
 import '../../../home/presentation/screens/create_room_sheet.dart';
+import '../../../home/presentation/providers/home_provider.dart';
 import '../providers/room_provider.dart';
 import '../widgets/seat_widget.dart';
 import '../widgets/room_chat_messages.dart';
@@ -43,11 +48,15 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   String _announcement = '';
   late final DateTime _joinedAt;
   String? _lastGiftMsgId;
+  String? _coverImageUrl;
+  String? _lastEmojiMsgId;
+  final Map<int, EmojiTrigger> _seatEmoji = {};
 
   @override
   void initState() {
     super.initState();
     _roomId = widget.room.roomId;
+    _coverImageUrl = widget.room.coverImage;
     _joinedAt = DateTime.now();
     WidgetsBinding.instance.addPostFrameCallback((_) => _initRoom());
   }
@@ -234,15 +243,18 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   void _onSeatTap(SeatModel seat) {
     final me = _currentUser;
     if (me == null) return;
-    final mySeat = ref.read(myCurrentSeatProvider);
     final isHost = ref.read(isHostProvider);
+
+    // تصوير مقعدي → اعرض ملفي الشخصي
+    if (!seat.isEmpty && seat.userId == me.uid) {
+      _showMyProfile(seat);
+      return;
+    }
 
     if (seat.index == 0) return;
 
     if (!seat.isEmpty) {
-      if (seat.userId == me.uid) {
-        _doLeaveSeat(seat.index);
-      } else if (isHost) {
+      if (isHost) {
         _showHostSeatMenu(seat);
       } else {
         _showUserProfile(seat);
@@ -256,6 +268,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     }
 
     // اترك المقعد القديم أولاً
+    final mySeat = ref.read(myCurrentSeatProvider);
     if (mySeat >= 0) {
       ref.read(seatsWriterProvider(_roomId)).leaveSeatIfOwner(mySeat, me.uid);
     }
@@ -267,9 +280,31 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       userAvatar: me.photoURL,
     );
     ref.read(myCurrentSeatProvider.notifier).state = seat.index;
-    // فتح الميكروفون عند الصعود للمقعد وتحديث الزر فوراً
     ZegoService().setMicMuted(false);
     ref.read(isMicMutedProvider.notifier).state = false;
+  }
+
+  void _showMyProfile(SeatModel seat) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => MyProfileSheet(
+        userId: seat.userId ?? '',
+        userName: seat.userName ?? 'أنا',
+        userAvatar: seat.userAvatar,
+        onLeaveSeat: () => _doLeaveSeat(seat.index),
+        onSendEmoji: (emoji) {
+          final me = _currentUser;
+          if (me == null) return;
+          ref.read(chatWriterProvider(_roomId)).sendEmojiReaction(
+            senderId: me.uid,
+            senderName: seat.userName ?? me.displayName ?? 'أنا',
+            emoji: emoji,
+          );
+        },
+      ),
+    );
   }
 
   void _doLeaveSeat(int index) {
@@ -462,6 +497,21 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       SoundService.playGiftSound();
     });
 
+    // كشف ردود الفعل بالإيموجي وإظهارها فوق مقعد المرسل
+    ref.listen(roomChatStreamProvider(_roomId), (_, next) {
+      if (!next.hasValue) return;
+      final emojiMsgs = next.value!.where((m) => m.type == MessageType.emoji).toList();
+      if (emojiMsgs.isEmpty) return;
+      final latest = emojiMsgs.last;
+      if (latest.id == _lastEmojiMsgId) return;
+      if (!latest.createdAt.isAfter(_joinedAt)) return;
+      _lastEmojiMsgId = latest.id;
+      final currentSeats = ref.read(seatsProvider(_roomId));
+      final seatIdx = currentSeats.indexWhere((s) => s.userId == latest.senderId);
+      if (seatIdx < 0) return;
+      setState(() => _seatEmoji[seatIdx] = EmojiTrigger(latest.content));
+    });
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -472,7 +522,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       child: Scaffold(
         body: Stack(
           children: [
-            _RoomBackground(coverImage: widget.room.coverImage),
+            _RoomBackground(coverImage: _coverImageUrl),
 
             Column(
               children: [
@@ -486,6 +536,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                     isHost: true,
                     isMe: seats[0].userId == _currentUser?.uid,
                     onTap: () => _onSeatTap(seats[0]),
+                    emojiTrigger: _seatEmoji[0],
                   ),
                 ),
 
@@ -509,6 +560,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                         isHost: false,
                         isMe: seat.userId == _currentUser?.uid,
                         onTap: () => _onSeatTap(seat),
+                        emojiTrigger: _seatEmoji[seat.index],
                       );
                     },
                   ),
@@ -550,13 +602,29 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   void _showGiftPanel(BuildContext ctx) {
     showModalBottomSheet(
       context: ctx,
-      backgroundColor: AppColors.surface,
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (_) => const GiftPanel(),
     );
+  }
+
+  Future<void> _pickCoverFromRoom() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (picked == null || !mounted) return;
+    try {
+      final Uint8List bytes = await picked.readAsBytes();
+      final storageRef = FirebaseStorage.instance.ref('room_covers/$_roomId/cover.jpg');
+      await storageRef.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      final url = await storageRef.getDownloadURL();
+      await ref.read(roomRepositoryProvider).updateRoom(_roomId, coverImage: url);
+      if (mounted) setState(() => _coverImageUrl = url);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('فشل تحديث صورة الغرفة'), backgroundColor: AppColors.error),
+        );
+      }
+    }
   }
 
   void _showSettings(BuildContext ctx) {
@@ -570,6 +638,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         roomId: _roomId,
         onEditAnnouncement: _showEditAnnouncement,
         onEditRoom: _showEditRoom,
+        onChangeCover: _pickCoverFromRoom,
       ),
     );
   }
@@ -585,30 +654,132 @@ class _RoomBackground extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
+        // Base: cover image or dark gradient
+        if (coverImage != null)
+          CachedNetworkImage(
+            imageUrl: coverImage!,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => _darkBase(),
+            errorWidget: (_, __, ___) => _darkBase(),
+          )
+        else
+          _darkBase(),
+
+        // Dark overlay
         Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF0D0D1F), Color(0xFF1A0A2E), Color(0xFF0F0F1A)],
+              colors: [
+                Colors.black.withAlpha(coverImage != null ? 170 : 110),
+                Colors.black.withAlpha(coverImage != null ? 100 : 50),
+                Colors.black.withAlpha(coverImage != null ? 180 : 130),
+              ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
           ),
         ),
-        ...List.generate(8, (i) => Positioned(
-          top: (i * 80.0) % 400,
-          left: (i * 55.0) % 300,
-          child: Container(
-            width: i % 2 == 0 ? 2 : 3,
-            height: i % 2 == 0 ? 2 : 3,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withAlpha(60 + i * 10),
-            ),
-          ),
-        )),
+
+        // Decorative pattern overlay
+        const Positioned.fill(child: _RoomBgPatternWidget()),
       ],
     );
   }
+
+  Widget _darkBase() => Container(
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        colors: [Color(0xFF0D0018), Color(0xFF1A0033), Color(0xFF0F0820), Color(0xFF2D0060)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+    ),
+  );
+}
+
+class _RoomBgPatternWidget extends StatelessWidget {
+  const _RoomBgPatternWidget();
+  @override
+  Widget build(BuildContext context) => IgnorePointer(child: CustomPaint(painter: _RoomBgPainter()));
+}
+
+class _RoomBgPainter extends CustomPainter {
+  static const _cols = [
+    Color(0xFF4285F4),
+    Color(0xFFEA4335),
+    Color(0xFFFBBC05),
+    Color(0xFF34A853),
+    Color(0xFFEC4899),
+    Color(0xFF7C3AED),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    void dot(double x, double y, double r, int ci, {double a = 0.25}) {
+      canvas.drawCircle(Offset(x, y), r,
+          Paint()..color = _cols[ci % 6].withAlpha((a * 255).round()));
+    }
+
+    void ring(double x, double y, double r, int ci, {double a = 0.15, double sw = 1.5}) {
+      canvas.drawCircle(Offset(x, y), r,
+          Paint()
+            ..color = _cols[ci % 6].withAlpha((a * 255).round())
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = sw);
+    }
+
+    // Corner accent dots
+    dot(w * 0.04, h * 0.06, 22, 0, a: 0.18);
+    dot(w * 0.94, h * 0.05, 16, 1, a: 0.18);
+    dot(w * 0.05, h * 0.88, 14, 2, a: 0.18);
+    dot(w * 0.95, h * 0.88, 18, 3, a: 0.18);
+
+    // Rings
+    ring(w * 0.12, h * 0.18, 48, 0, a: 0.10, sw: 1.5);
+    ring(w * 0.88, h * 0.14, 36, 1, a: 0.10, sw: 1.5);
+    ring(w * 0.10, h * 0.72, 32, 4, a: 0.10, sw: 1.5);
+    ring(w * 0.90, h * 0.75, 40, 3, a: 0.10, sw: 1.5);
+    ring(w * 0.50, h * 0.04, 24, 5, a: 0.08, sw: 1.0);
+    ring(w * 0.50, h * 0.96, 24, 0, a: 0.08, sw: 1.0);
+
+    // Scattered small dots
+    const pts = [
+      [0.22, 0.10], [0.78, 0.16], [0.38, 0.92], [0.62, 0.88],
+      [0.06, 0.42], [0.94, 0.40], [0.30, 0.52], [0.70, 0.48],
+      [0.16, 0.30], [0.84, 0.62], [0.46, 0.18], [0.54, 0.80],
+      [0.60, 0.28], [0.40, 0.68],
+    ];
+    for (int i = 0; i < pts.length; i++) {
+      dot(w * pts[i][0], h * pts[i][1], 3.5 + (i % 3), i, a: 0.22);
+    }
+
+    // Faint grid
+    final gridPaint = Paint()
+      ..color = Colors.white.withAlpha(7)
+      ..strokeWidth = 0.5;
+    for (double x = 0; x < w; x += w / 6) {
+      canvas.drawLine(Offset(x, 0), Offset(x, h), gridPaint);
+    }
+    for (double y = 0; y < h; y += h / 10) {
+      canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
+    }
+
+    // 8-pointed star rings at top & bottom center
+    void starRing(double cx, double cy, double dist) {
+      for (int i = 0; i < 8; i++) {
+        final angle = -pi / 2 + i * pi / 4;
+        ring(cx + dist * cos(angle), cy + dist * sin(angle), 5, i, a: 0.15, sw: 1.0);
+      }
+    }
+    starRing(w * 0.5, h * 0.10, 22);
+    starRing(w * 0.5, h * 0.90, 22);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter old) => false;
 }
 
 // ── رأس الغرفة ─────────────────────────────────────────────────────
@@ -718,10 +889,12 @@ class _RoomSettingsSheet extends ConsumerWidget {
     required this.roomId,
     this.onEditAnnouncement,
     this.onEditRoom,
+    this.onChangeCover,
   });
   final String roomId;
   final VoidCallback? onEditAnnouncement;
   final VoidCallback? onEditRoom;
+  final VoidCallback? onChangeCover;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -739,6 +912,13 @@ class _RoomSettingsSheet extends ConsumerWidget {
           const Text('إعدادات الغرفة',
               style: TextStyle(color: AppColors.textPrimary, fontSize: 17, fontWeight: FontWeight.w700, fontFamily: 'Cairo')),
           const SizedBox(height: 16),
+          _MenuTile(
+            icon: Icons.image_rounded, label: 'تغيير صورة الغرفة', color: AppColors.blue,
+            onTap: () {
+              Navigator.pop(context);
+              onChangeCover?.call();
+            },
+          ),
           _MenuTile(
             icon: Icons.edit_rounded, label: 'تعديل الغرفة', color: AppColors.primary,
             onTap: () {
@@ -774,3 +954,4 @@ class _RoomSettingsSheet extends ConsumerWidget {
     );
   }
 }
+

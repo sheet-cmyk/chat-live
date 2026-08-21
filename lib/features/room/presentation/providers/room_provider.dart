@@ -130,6 +130,24 @@ class _ChatWriter {
     );
   }
 
+  Future<void> sendEmojiReaction({
+    required String senderId,
+    required String senderName,
+    required String emoji,
+  }) async {
+    await _repo.sendMessage(
+      _roomId,
+      RoomMessageModel(
+        id: const Uuid().v4(),
+        senderId: senderId,
+        senderName: senderName,
+        content: emoji,
+        type: MessageType.emoji,
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
+
   Future<void> sendGift({
     required String senderId,
     required String senderName,

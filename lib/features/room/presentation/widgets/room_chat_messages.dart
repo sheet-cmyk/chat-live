@@ -26,6 +26,7 @@ class RoomChatMessages extends StatelessWidget {
       itemCount: messages.length,
       itemBuilder: (_, i) {
         final msg = messages[i];
+        if (msg.type == MessageType.emoji) return const SizedBox.shrink();
         if (msg.type == MessageType.gift) return _GiftMessage(msg: msg);
         return msg.isSystem
             ? _SystemMessage(msg: msg)
