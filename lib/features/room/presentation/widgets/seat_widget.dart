@@ -179,7 +179,7 @@ class _SeatWidgetState extends State<SeatWidget>
                 _DiamondBar(
                   userId: seat.userId!,
                   isHost: widget.isHost,
-                  challengeActive: widget.challengeActive,
+                  sessionDiamonds: seat.sessionDiamonds,
                 ),
             ],
           ),
@@ -270,18 +270,18 @@ class _SeatWidgetState extends State<SeatWidget>
 class _DiamondBar extends ConsumerWidget {
   const _DiamondBar({
     required this.userId,
+    required this.sessionDiamonds,
     this.isHost = false,
-    this.challengeActive = false,
   });
   final String userId;
+  final int sessionDiamonds;
   final bool isHost;
-  final bool challengeActive;
 
   static const _tiers = [
-    (5000000, Color(0xFFFF2D55)),   // أحمر — 5M+
-    (1000000, Color(0xFF9B59B6)),   // بنفسجي — 1M+
-    (500000,  Color(0xFF3498DB)),   // أزرق — 500K+
-    (50000,   Color(0xFF2ECC71)),   // أخضر — 50K+
+    (5000000, Color(0xFFFF2D55)),
+    (1000000, Color(0xFF9B59B6)),
+    (500000,  Color(0xFF3498DB)),
+    (50000,   Color(0xFF2ECC71)),
   ];
 
   static String _fmt(int n) {
@@ -292,56 +292,40 @@ class _DiamondBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final diamonds = ref.watch(userGiftDiamondsProvider(userId)).valueOrNull ?? 0;
-    if (diamonds == 0) return const SizedBox.shrink();
+    // لا يظهر الشريط حتى تصل هدية في هذه الجلسة
+    if (sessionDiamonds == 0) return const SizedBox.shrink();
 
-    Color? color;
+    // لون الشريط بناءً على إجمالي الماسات الكلي (مؤشر الرتبة)
+    final allTime = ref.watch(userGiftDiamondsProvider(userId)).valueOrNull ?? 0;
+    Color barColor = Colors.white;
     for (final (threshold, c) in _tiers) {
-      if (diamonds >= threshold) { color = c; break; }
+      if (allTime >= threshold) { barColor = c; break; }
     }
 
-    final fontSize = isHost ? 10.0 : 9.0;
-    final label = _fmt(diamonds);
+    final barW = isHost ? 68.0 : 56.0;
+    final fs   = isHost ? 9.5  : 8.5;
 
-    if (color == null) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 3),
+    return Container(
+      height: 19,
+      width: barW,
+      margin: const EdgeInsets.only(top: 4),
+      decoration: BoxDecoration(
+        color: barColor.withAlpha(38),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: barColor.withAlpha(140), width: 1),
+      ),
+      child: Center(
         child: Text(
-          '💎 $label',
+          '💎 ${_fmt(sessionDiamonds)}',
           style: TextStyle(
-            color: Colors.white54,
-            fontSize: fontSize,
-            fontFamily: 'Cairo',
-            height: 1.1,
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          height: 3,
-          width: isHost ? 52.0 : 42.0,
-          margin: const EdgeInsets.only(top: 3, bottom: 2),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(2),
-            boxShadow: [BoxShadow(color: color.withAlpha(160), blurRadius: 5)],
-          ),
-        ),
-        Text(
-          '💎 $label',
-          style: TextStyle(
-            color: color,
-            fontSize: fontSize,
+            color: barColor,
+            fontSize: fs,
             fontWeight: FontWeight.w700,
             fontFamily: 'Cairo',
-            height: 1.1,
+            height: 1.0,
           ),
         ),
-      ],
+      ),
     );
   }
 }

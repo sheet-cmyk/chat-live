@@ -9,6 +9,7 @@ class SeatModel {
   final int userLevel;
   final int userVip;
   final String? nameColor; // hex مثل 'FFD700' (ذهبي)
+  final int sessionDiamonds; // ماسات مستلمة في هذه الجلسة (تصفّر عند مغادرة المقعد)
 
   const SeatModel({
     required this.index,
@@ -21,6 +22,7 @@ class SeatModel {
     this.userLevel = 1,
     this.userVip = 0,
     this.nameColor,
+    this.sessionDiamonds = 0,
   });
 
   bool get isEmpty => userId == null;
@@ -35,6 +37,7 @@ class SeatModel {
     int? userLevel,
     int? userVip,
     String? nameColor,
+    int? sessionDiamonds,
   }) {
     return SeatModel(
       index: index,
@@ -47,6 +50,7 @@ class SeatModel {
       userLevel: userLevel ?? this.userLevel,
       userVip: userVip ?? this.userVip,
       nameColor: nameColor ?? this.nameColor,
+      sessionDiamonds: sessionDiamonds ?? this.sessionDiamonds,
     );
   }
 

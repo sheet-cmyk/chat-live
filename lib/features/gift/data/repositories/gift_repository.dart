@@ -87,6 +87,24 @@ class GiftRepository {
         });
       } catch (_) {}
 
+      // تحديث sessionDiamonds في مقعد المستقبِل (إن كان على المايك)
+      if (receiverId != null) {
+        try {
+          final seatsSnap = await _db
+              .collection('rooms')
+              .doc(roomId)
+              .collection('seats')
+              .where('userId', isEqualTo: receiverId)
+              .limit(1)
+              .get();
+          if (seatsSnap.docs.isNotEmpty) {
+            await seatsSnap.docs.first.reference.update({
+              'sessionDiamonds': FieldValue.increment(totalDiamonds),
+            });
+          }
+        } catch (_) {}
+      }
+
       // تحديث لوحة صدارة الغرفة (top gifters)
       try {
         await _db

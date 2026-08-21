@@ -38,6 +38,7 @@ class RoomStateRepository {
             userLevel: d['userLevel'] as int? ?? 1,
             userVip: d['userVip'] as int? ?? 0,
             nameColor: d['nameColor'] as String?,
+            sessionDiamonds: (d['sessionDiamonds'] as num?)?.toInt() ?? 0,
           );
         }
         return seats;
@@ -55,6 +56,7 @@ class RoomStateRepository {
       'userLevel': seat.userLevel,
       'userVip': seat.userVip,
       'nameColor': seat.nameColor,
+      'sessionDiamonds': 0, // يصفّر عند كل جلوس جديد
     });
   }
 
