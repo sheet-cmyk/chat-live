@@ -66,6 +66,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   bool _claimDone = false;
   String? _toast;
   final _records = <Map<String, dynamic>>[];
+  final _optimisticBets = <int, int>{}; // رهانات فورية قبل تأكيد Firebase
   int? _trackedRound;
 
   // Animations
@@ -135,7 +136,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
 
       _betSub = _repo.watchMyBet(state.roundId).listen((bet) {
         if (!mounted) return;
-        setState(() => _myBet = bet);
+        setState(() { _myBet = bet; _optimisticBets.clear(); });
       });
 
       _allBetsSub = _repo.watchBets(state.roundId).listen((snap) {
@@ -284,29 +285,61 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
 
   void _onAmountTap(int amt) => setState(() => _selectedAmount = amt);
 
-  // Each food tap immediately deducts coins and writes to Firebase (no confirm)
+  // حساب الرهان الفعلي (مؤكد من Firebase + رهانات فورية معلّقة)
+  MyBet? get _effectiveBet {
+    if (_optimisticBets.isEmpty) return _myBet;
+    final base = <int, int>{};
+    for (final item in (_myBet?.items ?? <BetItem>[])) {
+      base[item.foodIndex] = item.amount;
+    }
+    for (final e in _optimisticBets.entries) {
+      base[e.key] = (base[e.key] ?? 0) + e.value;
+    }
+    final items = base.entries
+        .map((e) => BetItem(foodIndex: e.key, amount: e.value))
+        .toList();
+    return MyBet(
+      items: items,
+      totalAmount: items.fold(0, (s, i) => s + i.amount),
+      paid: false,
+    );
+  }
+
+  // Each food tap: optimistic update first, then Firebase in background
   Future<void> _onFoodTap(int fi, int coins) async {
     if (_localPhase != 'betting') { _showToast('انتهى وقت الرهان'); return; }
     if (_selectedAmount == 0) { _showToast('اختر مبلغاً أولاً'); return; }
-    if (_tapping.contains(fi)) return; // already in-flight for this food
+    if (_tapping.contains(fi)) return;
     if (_selectedAmount > coins) { _showToast('رصيدك غير كافٍ 🪙'); return; }
 
-    // 6-food limit
-    final bet = _myBet;
-    if (bet != null && !bet.hasBetOn(fi) && bet.items.length >= 6) {
+    // 6-food limit (يشمل الرهانات الفورية المعلّقة)
+    final eff = _effectiveBet;
+    if (eff != null && !eff.hasBetOn(fi) && eff.items.length >= 6) {
       _showToast('الحد الأقصى 6 أطعمة مختلفة');
       return;
     }
 
-    setState(() => _tapping.add(fi));
+    // تحديث فوري: يظهر الرهان في الواجهة قبل تأكيد Firebase
+    setState(() {
+      _tapping.add(fi);
+      _optimisticBets[fi] = (_optimisticBets[fi] ?? 0) + _selectedAmount;
+    });
+
     final err = await _repo.tapBet(
       roundId: _state!.roundId,
       foodIndex: fi,
       amount: _selectedAmount,
     );
     if (!mounted) return;
-    setState(() => _tapping.remove(fi));
-    if (err != null) _showToast(err);
+    setState(() {
+      _tapping.remove(fi);
+      if (err != null) {
+        // فشل — تراجع عن التحديث الفوري
+        _optimisticBets[fi] = (_optimisticBets[fi] ?? 0) - _selectedAmount;
+        if ((_optimisticBets[fi] ?? 0) <= 0) _optimisticBets.remove(fi);
+        _showToast(err);
+      }
+    });
   }
 
   void _showToast(String msg) {
@@ -344,7 +377,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                       _buildWheelArea(coins),
                       _buildPhaseBar(),
                       _buildAmountBar(),
-                      if (_myBet != null) _buildPlacedBetSummary(),
+                      if (_effectiveBet != null) _buildPlacedBetSummary(),
                       _buildRecentBar(),
                       _buildBottomRow(coins),
                       const SizedBox(height: 8),
@@ -474,9 +507,8 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     final by = cy + r * sin(angle);
     final food = _kFoods[i];
 
-    final isMyBet = _myBet?.hasBetOn(i) ?? false;
-    final myBetAmt = _myBet?.amountFor(i) ?? 0;
-    final isTapping = _tapping.contains(i);
+    final isMyBet = _effectiveBet?.hasBetOn(i) ?? false;
+    final myBetAmt = _effectiveBet?.amountFor(i) ?? 0;
     final isHighlighted = _highlight == i;
     final isWinner = _state?.winnerIndex == i && _localPhase == 'result';
     final betterCount = _betterCounts[i] ?? 0;
@@ -518,10 +550,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                     blurRadius: glowR + 4, spreadRadius: isHighlighted ? 3 : 0,
                   )],
                 ),
-                child: isTapping
-                    ? const Center(child: SizedBox(width: 22, height: 22,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)))
-                    : Stack(children: [
+                child: Stack(children: [
                         Align(
                           alignment: const Alignment(0, -0.30),
                           child: Text(food.emoji, style: TextStyle(fontSize: bSize * 0.43)),
@@ -673,8 +702,9 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   Widget _buildPhaseBar() {
     String msg;
     if (_localPhase == 'betting') {
-      if (_myBet != null) {
-        msg = '✅ رهانك: ${_fmtFull(_myBet!.totalAmount)} 🪙 على ${_myBet!.items.length} طعام — اضغط مجدداً لإضافة المزيد';
+      final eff = _effectiveBet;
+      if (eff != null) {
+        msg = '✅ رهانك: ${_fmtFull(eff.totalAmount)} 🪙 على ${eff.items.length} طعام — اضغط مجدداً لإضافة المزيد';
       } else {
         msg = 'اختر المبلغ 👇  ثم اضغط على الطعام مباشرةً';
       }
@@ -841,7 +871,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   // ── Placed bet summary ─────────────────────────────────────────────
 
   Widget _buildPlacedBetSummary() {
-    final bet = _myBet;
+    final bet = _effectiveBet;
     if (bet == null) return const SizedBox.shrink();
 
     return Container(
@@ -910,7 +940,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     final state = _state!;
     final winner = state.winnerIndex ?? 0;
     final food = _kFoods[winner];
-    final iWon = _myBet?.hasBetOn(winner) ?? false;
+    final iWon = _effectiveBet?.hasBetOn(winner) ?? false;
     final numWon = _betterCounts[winner] ?? 0;
     final numBet = _totalBettors;
 
@@ -988,13 +1018,13 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                 border: Border.all(color: iWon ? const Color(0xFF27AE60).withAlpha(180) : const Color(0xFFDAA520).withAlpha(80)),
               ),
               child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Text(iWon ? '🏆' : (_myBet != null ? '😔' : '👀'), style: const TextStyle(fontSize: 22)),
+                Text(iWon ? '🏆' : (_myBet != null || _optimisticBets.isNotEmpty ? '😔' : '👀'), style: const TextStyle(fontSize: 22)),
                 const SizedBox(width: 8),
                 Text(
                   iWon
                     ? 'فزت! +${_fmtNum(_myWinAmount)} 🪙'
-                    : (_myBet != null
-                        ? 'خسرت ${_fmtNum(_myBet!.amountFor(winner))} 🪙'
+                    : (_effectiveBet != null
+                        ? 'خسرت ${_fmtNum(_effectiveBet!.amountFor(winner))} 🪙'
                         : 'لم تراهن'),
                   style: TextStyle(
                     color: iWon ? const Color(0xFFFFD700) : Colors.white70,
@@ -1010,7 +1040,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
                 Column(children: [
                   Row(mainAxisSize: MainAxisSize.min, children: [
-                    Text(_fmtNum(_myBet?.totalAmount ?? 0),
+                    Text(_fmtNum(_effectiveBet?.totalAmount ?? 0),
                       style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 20)),
                     const Text(' 🪙', style: TextStyle(fontSize: 14)),
                   ]),
