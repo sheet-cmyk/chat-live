@@ -7,6 +7,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/repositories/greedy_star_repository.dart';
 import '../../../wallet/presentation/providers/wallet_provider.dart';
 
+// ── Egyptian Palette ──────────────────────────────────────────────────────────
+const _kGold       = Color(0xFFD4AF37);
+const _kBrightGold = Color(0xFFF5C542);
+const _kTurquoise  = Color(0xFF0FA3A5);
+const _kDeepTeal   = Color(0xFF075E63);
+const _kEmerald    = Color(0xFF087F5B);
+const _kRoyalPurple= Color(0xFF39205F);
+const _kDeepPurple = Color(0xFF241638);
+const _kSandstone  = Color(0xFFC89B5B);
+const _kCream      = Color(0xFFFFF4D6);
+const _kDarkBrown  = Color(0xFF3A2415);
+
 // ── Food metadata ─────────────────────────────────────────────────────────────
 
 class _Food {
@@ -361,7 +373,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
         body: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF321A43), Color(0xFF2B1739), Color(0xFF1A0B22)],
+              colors: [Color(0xFF0C3A3E), Color(0xFF071E22), Color(0xFF04120F)],
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
             ),
           ),
@@ -377,8 +389,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                       _buildWheelArea(coins),
                       _buildPhaseBar(),
                       _buildAmountBar(),
-                      if (_effectiveBet != null) _buildPlacedBetSummary(),
-                      _buildRecentBar(),
+                          _buildRecentBar(),
                       _buildBottomRow(coins),
                       const SizedBox(height: 8),
                     ]),
@@ -407,46 +418,48 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
               onTap: () => Navigator.pop(context),
               child: Container(
                 width: 32, height: 32,
-                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withAlpha(60)),
-                child: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _kDeepTeal,
+                  border: Border.all(color: _kGold, width: 1.5),
+                ),
+                child: const Icon(Icons.close_rounded, color: _kCream, size: 18),
               ),
             ),
             const SizedBox(width: 8),
             GestureDetector(
               onTap: _showRules,
-              child: Stack(clipBehavior: Clip.none, children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFFD6A928), Color(0xFFB8860B)]),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Text('قاعدة', style: TextStyle(color: Color(0xFF1A0B22), fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 12)),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [_kGold, _kSandstone]),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _kBrightGold, width: 1),
                 ),
-                Positioned(top: -3, left: -3,
-                  child: Container(width: 7, height: 7, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFFF3B9A)))),
-              ]),
+                child: const Text('القواعد', style: TextStyle(color: _kDarkBrown, fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 11)),
+              ),
             ),
             Expanded(
               child: Center(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF2ECC71), Color(0xFF27AE60), Color(0xFF1E8449)]),
+                    gradient: const LinearGradient(colors: [_kEmerald, _kDeepTeal, _kEmerald]),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFDAA520), width: 2),
+                    border: Border.all(color: _kGold, width: 2),
+                    boxShadow: [BoxShadow(color: _kGold.withAlpha(60), blurRadius: 6)],
                   ),
-                  child: const Text('Greedy Star ⭐',
-                    style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900,
+                  child: const Text('النجمة الجشعة 🌟',
+                    style: TextStyle(color: _kCream, fontSize: 13, fontWeight: FontWeight.w900, fontFamily: 'Cairo',
                       shadows: [Shadow(color: Colors.black54, blurRadius: 4, offset: Offset(1, 2))])),
                 ),
               ),
             ),
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text('جولة #${_state?.roundId ?? '-'}',
-                style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.bold)),
+                style: const TextStyle(color: _kBrightGold, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.bold)),
               Text(_localPhase == 'betting' ? 'رهان' : _localPhase == 'spinning' ? 'دوران' : _localPhase == 'result' ? 'نتيجة' : '...',
-                style: const TextStyle(color: Colors.white70, fontFamily: 'Cairo', fontSize: 9)),
+                style: const TextStyle(color: _kSandstone, fontFamily: 'Cairo', fontSize: 9)),
             ]),
           ]),
         ),
@@ -455,27 +468,27 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
           margin: const EdgeInsets.fromLTRB(14, 6, 14, 0),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF1A0B24), Color(0xFF2D1440), Color(0xFF1A0B24)]),
+            gradient: const LinearGradient(colors: [_kDeepTeal, _kDeepPurple, _kDeepTeal]),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: const Color(0xFFDAA520), width: 2),
-            boxShadow: [BoxShadow(color: Colors.black.withAlpha(80), blurRadius: 10, offset: const Offset(0, 3))],
+            border: Border.all(color: _kGold, width: 2),
+            boxShadow: [BoxShadow(color: _kGold.withAlpha(40), blurRadius: 8, offset: const Offset(0, 3))],
           ),
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             const Text('🪙', style: TextStyle(fontSize: 22)),
             const SizedBox(width: 8),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('رصيدك', style: TextStyle(color: Colors.white54, fontFamily: 'Cairo', fontSize: 10)),
+              const Text('رصيدك', style: TextStyle(color: _kSandstone, fontFamily: 'Cairo', fontSize: 10)),
               Text(_fmtNumFull(coins),
-                style: const TextStyle(color: Color(0xFFFFD700), fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 20,
+                style: const TextStyle(color: _kBrightGold, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 20,
                   shadows: [Shadow(color: Colors.black54, blurRadius: 4)])),
             ]),
             const SizedBox(width: 12),
-            Container(width: 1, height: 30, color: const Color(0xFFDAA520).withAlpha(80)),
+            Container(width: 1, height: 30, color: _kGold.withAlpha(80)),
             const SizedBox(width: 12),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('المشتركون', style: TextStyle(color: Colors.white54, fontFamily: 'Cairo', fontSize: 10)),
+              const Text('المشتركون', style: TextStyle(color: _kSandstone, fontFamily: 'Cairo', fontSize: 10)),
               Text('${_betterCounts.values.fold(0, (a, b) => a + b)} لاعب',
-                style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 14)),
+                style: const TextStyle(color: _kCream, fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 14)),
             ]),
           ]),
         ),
@@ -516,8 +529,9 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     Widget bubble = AnimatedBuilder(
       animation: _glowCtrl,
       builder: (_, __) {
-        const scale = 1.0; // bubbles stay fixed when bet is placed
+        const scale = 1.0;
         final glowR = isHighlighted ? _glow.value : 0.0;
+        final isPharaoh = i == 7; // السمك → الفرعون (مرئياً فقط)
         return Transform.scale(
           scale: scale,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -528,28 +542,39 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: isHighlighted
-                        ? [Colors.white, const Color(0xFFFFE066), const Color(0xFFFF8C00)]
+                        ? [_kBrightGold, _kGold, _kSandstone]
                         : isWinner
-                            ? [const Color(0xFFFFFFAA), const Color(0xFFFFD700), const Color(0xFFFF8C00)]
+                            ? [_kBrightGold, _kGold, const Color(0xFF8B6914)]
                             : isMyBet
-                                ? [const Color(0xFF8B50B5), const Color(0xFF6B35A0), const Color(0xFF4D2080)]
-                                : [const Color(0xFF7A3EA0), const Color(0xFF5C2880), const Color(0xFF3D1660)],
+                                ? [const Color(0xFF0FA3A5), _kDeepTeal, const Color(0xFF033C3F)]
+                                : [_kRoyalPurple, _kDeepPurple, const Color(0xFF110D1E)],
                     center: const Alignment(-0.3, -0.3), radius: 0.85,
                   ),
                   border: Border.all(
-                    color: isHighlighted ? Colors.white
-                        : isMyBet ? const Color(0xFF27AE60)
-                        : const Color(0xFFDAA520),
-                    width: isHighlighted ? 4 : isMyBet ? 3.5 : 2.5,
+                    color: isHighlighted ? _kBrightGold
+                        : isMyBet ? _kTurquoise
+                        : isPharaoh ? _kGold
+                        : _kGold.withAlpha(180),
+                    width: isHighlighted ? 4 : isMyBet ? 3.5 : isPharaoh ? 3 : 2,
                   ),
                   boxShadow: [BoxShadow(
-                    color: isHighlighted ? Colors.white.withAlpha(220)
-                        : isMyBet ? Colors.green.withAlpha(140)
+                    color: isHighlighted ? _kBrightGold.withAlpha(200)
+                        : isMyBet ? _kTurquoise.withAlpha(140)
+                        : isPharaoh ? _kGold.withAlpha(80)
                         : Colors.black.withAlpha(55),
                     blurRadius: glowR + 4, spreadRadius: isHighlighted ? 3 : 0,
                   )],
                 ),
-                child: Stack(children: [
+                child: isPharaoh
+                    ? Center(child: Column(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Text('👑', style: TextStyle(fontSize: bSize * 0.34)),
+                        Text('فرعون', style: TextStyle(
+                          color: isHighlighted ? _kDarkBrown : _kGold,
+                          fontSize: 9, fontFamily: 'Cairo', fontWeight: FontWeight.w900,
+                          shadows: const [Shadow(color: Colors.black54, blurRadius: 2)],
+                        )),
+                      ]))
+                    : Stack(children: [
                         Align(
                           alignment: const Alignment(0, -0.30),
                           child: Text(food.emoji, style: TextStyle(fontSize: bSize * 0.43)),
@@ -564,7 +589,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text('×${food.mult}',
-                                style: const TextStyle(color: Colors.white, fontSize: 11,
+                                style: const TextStyle(color: _kCream, fontSize: 11,
                                   fontWeight: FontWeight.w900,
                                   shadows: [Shadow(color: Colors.black, blurRadius: 2)])),
                             ),
@@ -589,12 +614,12 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A6B38),
+                    color: _kDeepTeal,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white, width: 1),
+                    border: Border.all(color: _kGold, width: 1),
                   ),
                   child: Text(_fmtFull(myBetAmt),
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900)),
+                    style: const TextStyle(color: _kBrightGold, fontSize: 9, fontWeight: FontWeight.w900)),
                 ),
               )
             else
@@ -620,11 +645,11 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(46),
           gradient: const LinearGradient(
-            colors: [Color(0xFF2ECC71), Color(0xFF27AE60), Color(0xFF1A7A3A)],
+            colors: [_kTurquoise, _kDeepTeal, Color(0xFF033C3F)],
             begin: Alignment.topLeft, end: Alignment.bottomRight,
           ),
-          border: Border.all(color: const Color(0xFFDAA520), width: 3),
-          boxShadow: [BoxShadow(color: Colors.green.withAlpha(100), blurRadius: 12, spreadRadius: 2)],
+          border: Border.all(color: _kGold, width: 3),
+          boxShadow: [BoxShadow(color: _kGold.withAlpha(80), blurRadius: 12, spreadRadius: 2)],
         ),
         child: Stack(children: [
           // Star bouncing in center
@@ -710,12 +735,16 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 9),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF2ECC71), Color(0xFF27AE60), Color(0xFF1E8449)]),
-        boxShadow: [BoxShadow(color: Colors.green.withAlpha(80), blurRadius: 8, offset: const Offset(0, 2))],
+        gradient: const LinearGradient(colors: [_kDeepTeal, _kEmerald, _kDeepTeal]),
+        border: const Border(
+          top: BorderSide(color: _kGold, width: 1),
+          bottom: BorderSide(color: _kGold, width: 1),
+        ),
+        boxShadow: [BoxShadow(color: _kGold.withAlpha(40), blurRadius: 6, offset: const Offset(0, 2))],
       ),
       child: Text(msg, textAlign: TextAlign.center,
-        style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 13,
-          shadows: [Shadow(color: Colors.black38, blurRadius: 3)])),
+        style: const TextStyle(color: _kCream, fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 13,
+          shadows: [Shadow(color: Colors.black54, blurRadius: 3)])),
     );
   }
 
@@ -727,10 +756,10 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: [Color(0xFF1E0B2E), Color(0xFF2D1440), Color(0xFF1E0B2E)]),
+        gradient: LinearGradient(colors: [_kDeepPurple, _kRoyalPurple, _kDeepPurple]),
         border: Border(
-          top: BorderSide(color: Color(0xFF1A0B24), width: 2),
-          bottom: BorderSide(color: Color(0xFF1A0B24), width: 2),
+          top: BorderSide(color: _kGold, width: 1),
+          bottom: BorderSide(color: _kGold, width: 1),
         ),
       ),
       child: Column(children: [
@@ -754,24 +783,24 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: isSelected
-                        ? [const Color(0xFFFFD700), const Color(0xFFFFA000)]
-                        : [const Color(0xFF2A2A2A), const Color(0xFF1A1A1A)],
+                        ? [_kBrightGold, _kGold, _kSandstone]
+                        : [_kDeepPurple, _kRoyalPurple],
                   ),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: isSelected ? Colors.white : Colors.transparent,
-                    width: isSelected ? 2 : 0,
+                    color: isSelected ? _kBrightGold : _kGold.withAlpha(120),
+                    width: isSelected ? 2 : 1,
                   ),
                   boxShadow: isSelected
-                      ? [BoxShadow(color: const Color(0xFFD6A928).withAlpha(140), blurRadius: 10, spreadRadius: 1)]
+                      ? [BoxShadow(color: _kGold.withAlpha(160), blurRadius: 10, spreadRadius: 1)]
                       : [],
                 ),
                 child: Text(
                   _fmtNum(amt),
                   style: TextStyle(
                     color: !canBet ? Colors.white24
-                        : isSelected ? const Color(0xFF2B1040)
-                        : Colors.white70,
+                        : isSelected ? _kDarkBrown
+                        : _kSandstone,
                     fontSize: 11, fontWeight: FontWeight.w900,
                     fontFamily: 'Cairo',
                   ),
@@ -796,22 +825,22 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
 
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
-      decoration: BoxDecoration(
-        color: Colors.black.withAlpha(120),
-        border: const Border(
-          top: BorderSide(color: Color(0xFF1A0B24), width: 2),
-          bottom: BorderSide(color: Color(0xFF1A0B24), width: 2),
+      decoration: const BoxDecoration(
+        color: Color(0xFF041214),
+        border: Border(
+          top: BorderSide(color: _kGold, width: 1),
+          bottom: BorderSide(color: _kGold, width: 1),
         ),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Row(children: [
-          const Text('📊', style: TextStyle(fontSize: 10)),
+          const Text('𓂀', style: TextStyle(fontSize: 12, color: _kGold)),
           const SizedBox(width: 4),
           const Text('آخر النتائج',
-            style: TextStyle(color: Colors.white54, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.bold)),
+            style: TextStyle(color: _kSandstone, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.bold)),
           const Spacer(),
           Text('${all.length} جولة',
-            style: const TextStyle(color: Colors.white38, fontFamily: 'Cairo', fontSize: 9)),
+            style: const TextStyle(color: _kGold, fontFamily: 'Cairo', fontSize: 9)),
         ]),
         const SizedBox(height: 4),
         SizedBox(
@@ -835,14 +864,14 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: isLatest
-                              ? const Color(0xFFFFD700).withAlpha(60)
-                              : Colors.white.withAlpha(15),
+                              ? _kGold.withAlpha(60)
+                              : _kRoyalPurple.withAlpha(120),
                           border: Border.all(
-                            color: isLatest ? const Color(0xFFFFD700) : Colors.white24,
+                            color: isLatest ? _kBrightGold : _kGold.withAlpha(100),
                             width: isLatest ? 2 : 1,
                           ),
                           boxShadow: isLatest
-                              ? [BoxShadow(color: const Color(0xFFFFD700).withAlpha(100), blurRadius: 6)]
+                              ? [BoxShadow(color: _kGold.withAlpha(120), blurRadius: 6)]
                               : [],
                         ),
                         child: Center(
@@ -858,55 +887,15 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     );
   }
 
-  // ── Placed bet summary ─────────────────────────────────────────────
-
-  Widget _buildPlacedBetSummary() {
-    final bet = _effectiveBet;
-    if (bet == null) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(10, 4, 10, 4),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF1A5C2E), Color(0xFF27AE60), Color(0xFF1A5C2E)]),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF27AE60), width: 2),
-        boxShadow: [BoxShadow(color: Colors.green.withAlpha(80), blurRadius: 10)],
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Text('✅', style: TextStyle(fontSize: 16)),
-          const SizedBox(width: 6),
-          Text('رهانك مسجّل — ${bet.items.length} طعام',
-            style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 13)),
-          const Spacer(),
-          Text('مجموع: ${_fmtNum(bet.totalAmount)} 🪙',
-            style: const TextStyle(color: Color(0xFFFFD700), fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 12)),
-        ]),
-        const SizedBox(height: 8),
-        Wrap(spacing: 6, runSpacing: 4, children: bet.items.map((item) {
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: Colors.black.withAlpha(60), borderRadius: BorderRadius.circular(14)),
-            child: Text(
-              '${_kFoods[item.foodIndex].emoji} ${_kFoods[item.foodIndex].name}  ${_fmtNum(item.amount)} 🪙 × ${_kFoods[item.foodIndex].mult}',
-              style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold),
-            ),
-          );
-        }).toList()),
-      ]),
-    );
-  }
-
   // ── Bottom row ─────────────────────────────────────────────────────
 
   Widget _buildBottomRow(int coins) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       child: Row(children: [
-        Expanded(child: _statBtn('سجلاتي 📋', const Color(0xFF2196F3), Colors.white, onTap: _showRecords)),
+        Expanded(child: _statBtn('سجلاتي 📋', _kDeepTeal, _kCream, onTap: _showRecords)),
         const SizedBox(width: 8),
-        Expanded(child: _statBtn('القواعد 📖', const Color(0xFF4D2060), Colors.white, onTap: _showRules)),
+        Expanded(child: _statBtn('القواعد 📖', _kRoyalPurple, _kCream, onTap: _showRules)),
       ]),
     );
   }
@@ -916,8 +905,12 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: bg.withAlpha(80), blurRadius: 8, offset: const Offset(0, 3))]),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: _kGold, width: 1.5),
+          boxShadow: [BoxShadow(color: _kGold.withAlpha(60), blurRadius: 8, offset: const Offset(0, 3))],
+        ),
         child: Text(text, textAlign: TextAlign.center,
           style: TextStyle(color: fg, fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 12)),
       ),
@@ -942,14 +935,14 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
           height: MediaQuery.of(context).size.height * 0.66,
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF321A43), Color(0xFF2B1739), Color(0xFF1A0B22)],
+              colors: [Color(0xFF0A3038), Color(0xFF071E22), Color(0xFF04100E)],
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
             ),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             border: const Border(
-              top: BorderSide(color: Color(0xFFD6A928), width: 2),
-              left: BorderSide(color: Color(0xFFD6A928), width: 1),
-              right: BorderSide(color: Color(0xFFD6A928), width: 1),
+              top: BorderSide(color: _kGold, width: 2),
+              left: BorderSide(color: _kGold, width: 1),
+              right: BorderSide(color: _kGold, width: 1),
             ),
             boxShadow: [BoxShadow(color: Colors.black.withAlpha(180), blurRadius: 30, spreadRadius: 4, offset: const Offset(0, -4))],
           ),
@@ -1003,9 +996,9 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
               margin: const EdgeInsets.symmetric(horizontal: 16),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: iWon ? const Color(0xFF27AE60).withAlpha(90) : const Color(0xFF5C2880).withAlpha(80),
+                color: iWon ? _kEmerald.withAlpha(90) : _kDeepTeal.withAlpha(80),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: iWon ? const Color(0xFF27AE60).withAlpha(180) : const Color(0xFFDAA520).withAlpha(80)),
+                border: Border.all(color: iWon ? _kTurquoise.withAlpha(200) : _kGold.withAlpha(120)),
               ),
               child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Text(iWon ? '🏆' : (_myBet != null || _optimisticBets.isNotEmpty ? '😔' : '👀'), style: const TextStyle(fontSize: 22)),
@@ -1017,7 +1010,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                         ? 'خسرت ${_fmtNum(_effectiveBet!.amountFor(winner))} 🪙'
                         : 'لم تراهن'),
                   style: TextStyle(
-                    color: iWon ? const Color(0xFFFFD700) : Colors.white70,
+                    color: iWon ? _kBrightGold : _kCream,
                     fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 15),
                 ),
               ]),
@@ -1053,13 +1046,13 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(children: [
-                Expanded(child: Container(height: 1, color: const Color(0xFFD6A928).withAlpha(50))),
+                Expanded(child: Container(height: 1, color: _kGold.withAlpha(80))),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: Text('أكبر الفائزين 🏆',
-                    style: TextStyle(color: Colors.white.withAlpha(160), fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold)),
+                    style: TextStyle(color: _kGold.withAlpha(200), fontFamily: 'Cairo', fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
-                Expanded(child: Container(height: 1, color: const Color(0xFFD6A928).withAlpha(50))),
+                Expanded(child: Container(height: 1, color: _kGold.withAlpha(80))),
               ]),
             ),
 
@@ -1156,10 +1149,14 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
         color: Colors.transparent,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-          decoration: BoxDecoration(color: Colors.black.withAlpha(220), borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black.withAlpha(80), blurRadius: 12)]),
+          decoration: BoxDecoration(
+            color: _kDeepTeal,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _kGold, width: 1.5),
+            boxShadow: [BoxShadow(color: Colors.black.withAlpha(80), blurRadius: 12)],
+          ),
           child: Text(_toast!, textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold)),
+            style: const TextStyle(color: _kCream, fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.bold)),
         ),
       ),
     );
@@ -1173,9 +1170,9 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       builder: (_) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1A0B24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFFDAA520), width: 2)),
-          title: const Text('قواعد اللعبة', style: TextStyle(color: Color(0xFFFFD700), fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 18), textAlign: TextAlign.center),
+          backgroundColor: const Color(0xFF071E22),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: _kGold, width: 2)),
+          title: const Text('قواعد اللعبة', style: TextStyle(color: _kBrightGold, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 18), textAlign: TextAlign.center),
           content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             _rule('1', 'اضغط على الطعام في العجلة لاختياره'),
             _rule('2', 'اختر المبلغ من الشريط الذهبي (500 → 100ك)'),
@@ -1188,17 +1185,23 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
             // Food table
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.white.withAlpha(10), borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(color: _kDeepTeal.withAlpha(60), borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _kGold.withAlpha(80))),
               child: Column(children: _kFoods.map((f) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(children: [
-                  Text(f.emoji, style: const TextStyle(fontSize: 18)),
+                  Text(f.name == 'سمك' ? '👑' : f.emoji, style: const TextStyle(fontSize: 18)),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(f.name, style: const TextStyle(color: Colors.white70, fontFamily: 'Cairo', fontSize: 12))),
+                  Expanded(child: Text(f.name == 'سمك' ? 'فرعون' : f.name,
+                    style: const TextStyle(color: _kCream, fontFamily: 'Cairo', fontSize: 12))),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: f.hot ? const Color(0xFFFF3B30) : const Color(0xFF5C2880).withAlpha(120), borderRadius: BorderRadius.circular(8)),
-                    child: Text('${f.mult}×', style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 12)),
+                    decoration: BoxDecoration(
+                      color: f.hot ? const Color(0xFFB8400A) : _kRoyalPurple,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _kGold.withAlpha(120)),
+                    ),
+                    child: Text('${f.mult}×', style: const TextStyle(color: _kBrightGold, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 12)),
                   ),
                 ]),
               )).toList()),
@@ -1206,11 +1209,11 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
           ]),
           actions: [
             Center(child: TextButton(
-              style: TextButton.styleFrom(backgroundColor: const Color(0xFFFFD700),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              style: TextButton.styleFrom(backgroundColor: _kGold,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: _kBrightGold)),
                 padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 8)),
               onPressed: () => Navigator.pop(context),
-              child: const Text('فهمت! ✅', style: TextStyle(color: Color(0xFF1A0B22), fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 15)),
+              child: const Text('فهمت! ✅', style: TextStyle(color: _kDarkBrown, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 15)),
             )),
           ],
         ),
@@ -1221,18 +1224,18 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   Widget _rule(String n, String text) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 3),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Container(width: 20, height: 20, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFFFD700)),
-        child: Center(child: Text(n, style: const TextStyle(color: Color(0xFF1A0B22), fontSize: 11, fontWeight: FontWeight.w900)))),
+      Container(width: 20, height: 20, decoration: const BoxDecoration(shape: BoxShape.circle, color: _kGold),
+        child: Center(child: Text(n, style: const TextStyle(color: _kDarkBrown, fontSize: 11, fontWeight: FontWeight.w900)))),
       const SizedBox(width: 8),
-      Expanded(child: Text(text, style: const TextStyle(color: Colors.white70, fontFamily: 'Cairo', fontSize: 12))),
+      Expanded(child: Text(text, style: const TextStyle(color: _kCream, fontFamily: 'Cairo', fontSize: 12))),
     ]),
   );
 
   void _showRecords() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A0B24),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20)), side: BorderSide(color: Color(0xFFDAA520), width: 2)),
+      backgroundColor: const Color(0xFF071E22),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20)), side: BorderSide(color: _kGold, width: 2)),
       isScrollControlled: true,
       builder: (_) => Directionality(
         textDirection: TextDirection.rtl,
@@ -1241,8 +1244,8 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
           builder: (_, ctrl) => Column(children: [
             Padding(padding: const EdgeInsets.all(12),
               child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white30, borderRadius: BorderRadius.circular(2)))),
-            const Text('سجل مشاركاتي', style: TextStyle(color: Color(0xFFFFD700), fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 18)),
-            const Divider(color: Color(0xFFDAA520)),
+            const Text('سجل مشاركاتي', style: TextStyle(color: _kBrightGold, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 18)),
+            const Divider(color: _kGold),
             Expanded(
               child: _records.isEmpty
                   ? const Center(child: Text('لا توجد سجلات بعد', style: TextStyle(color: Colors.white54, fontFamily: 'Cairo')))
@@ -1341,37 +1344,41 @@ class _DotPattern extends StatelessWidget {
 class _DotPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
+    // زخرف مصري: خطوط متقاطعة ذهبية خفيفة + علامة عنخ مصغّرة
     final linePaint = Paint()
-      ..color = const Color(0xFFD6A928).withAlpha(22)
-      ..strokeWidth = 0.8
+      ..color = _kGold.withAlpha(18)
+      ..strokeWidth = 0.6
       ..style = PaintingStyle.stroke;
     final dotPaint = Paint()
-      ..color = const Color(0xFFD6A928).withAlpha(30)
+      ..color = _kTurquoise.withAlpha(25)
       ..style = PaintingStyle.fill;
 
-    const step = 40.0;
+    // شبكة خطوط متقاطعة خفيفة
+    const step = 48.0;
+    for (double x = 0; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), linePaint);
+    }
+    for (double y = 0; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
+    }
+
+    // نقاط تركواز عند كل تقاطع
     for (double cx = 0; cx < size.width + step; cx += step) {
       for (double cy = 0; cy < size.height + step; cy += step) {
-        // 8-pointed star outline (Islamic geometric motif)
-        final path = Path();
-        const r1 = 9.0, r2 = 5.0;
-        for (int i = 0; i < 8; i++) {
-          final a1 = (i * 2 * pi / 8) - pi / 2;
-          final a2 = a1 + pi / 8;
-          final x1 = cx + r1 * cos(a1);
-          final y1 = cy + r1 * sin(a1);
-          final x2 = cx + r2 * cos(a2);
-          final y2 = cy + r2 * sin(a2);
-          if (i == 0) {
-            path.moveTo(x1, y1);
-          } else {
-            path.lineTo(x1, y1);
-          }
-          path.lineTo(x2, y2);
+        canvas.drawCircle(Offset(cx, cy), 2.0, dotPaint);
+        // شكل لوتس مصغّر (دائرة مع خطوط بتلات)
+        final petalPaint = Paint()
+          ..color = _kGold.withAlpha(14)
+          ..strokeWidth = 0.8
+          ..style = PaintingStyle.stroke;
+        for (int j = 0; j < 4; j++) {
+          final a = j * pi / 2;
+          canvas.drawLine(
+            Offset(cx + 3 * cos(a), cy + 3 * sin(a)),
+            Offset(cx + 8 * cos(a), cy + 8 * sin(a)),
+            petalPaint,
+          );
         }
-        path.close();
-        canvas.drawPath(path, linePaint);
-        canvas.drawCircle(Offset(cx, cy), 1.2, dotPaint);
       }
     }
   }
@@ -1388,19 +1395,25 @@ class _WheelPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // خلفية العجلة الرئيسية — تركواز مصري
     canvas.drawCircle(Offset(cx, cy), r + 45,
-      Paint()..shader = const RadialGradient(
-        colors: [Color(0xFF5C2880), Color(0xFF421D52), Color(0xFF1A0B24)], radius: 0.8,
+      Paint()..shader = RadialGradient(
+        colors: [_kTurquoise, _kDeepTeal, const Color(0xFF03383C)], radius: 0.85,
       ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: r + 45)));
 
+    // الحلقة الخارجية الذهبية
     canvas.drawCircle(Offset(cx, cy), r + 36,
-      Paint()..color = const Color(0xFFDAA520)..style = PaintingStyle.stroke..strokeWidth = 5);
+      Paint()..color = _kGold..style = PaintingStyle.stroke..strokeWidth = 6);
+    canvas.drawCircle(Offset(cx, cy), r + 30,
+      Paint()..color = _kBrightGold.withAlpha(80)..style = PaintingStyle.stroke..strokeWidth = 2);
 
-    final innerRing = Paint()..color = const Color(0xFFB8860B)..style = PaintingStyle.stroke..strokeWidth = 3.5;
+    // حلقة داخلية ذهبية
+    final innerRing = Paint()..color = _kGold..style = PaintingStyle.stroke..strokeWidth = 3.5;
     canvas.drawCircle(Offset(cx, cy), 50, innerRing);
 
-    final spoke = Paint()..color = const Color(0xFF351743)..strokeWidth = 7..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
-    final spokeL = Paint()..color = const Color(0xFFD6A928)..strokeWidth = 2..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
+    // الأذرع — بني داكن + ذهبي
+    final spoke  = Paint()..color = _kDarkBrown..strokeWidth = 7..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
+    final spokeL = Paint()..color = _kGold..strokeWidth = 1.5..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
     for (int i = 0; i < 8; i++) {
       final a = -pi / 2 + i * pi / 4;
       final sx = cx + 52 * cos(a); final sy = cy + 52 * sin(a);
@@ -1409,12 +1422,14 @@ class _WheelPainter extends CustomPainter {
       canvas.drawLine(Offset(sx, sy), Offset(ex, ey), spokeL);
     }
 
+    // الدائرة الوسطى
     canvas.drawCircle(Offset(cx, cy), 48,
-      Paint()..shader = const RadialGradient(colors: [Color(0xFF351743), Color(0xFF1A0B24)])
+      Paint()..shader = RadialGradient(colors: [_kDeepTeal, const Color(0xFF031A1C)])
           .createShader(Rect.fromCircle(center: Offset(cx, cy), radius: 50)));
     canvas.drawCircle(Offset(cx, cy), 48, innerRing);
 
-    final leg = Paint()..color = const Color(0xFF2D1440)..strokeWidth = 8..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
+    // الأرجل الداعمة
+    final leg = Paint()..color = _kDarkBrown..strokeWidth = 8..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
     canvas.drawLine(Offset(cx, cy + r + 30), Offset(cx - 40, size.height - 10), leg);
     canvas.drawLine(Offset(cx, cy + r + 30), Offset(cx + 40, size.height - 10), leg);
     canvas.drawLine(Offset(cx - 50, size.height - 10), Offset(cx + 50, size.height - 10), leg);
