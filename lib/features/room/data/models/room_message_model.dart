@@ -9,8 +9,9 @@ class RoomMessageModel {
   final MessageType type;
   final DateTime createdAt;
   final int senderLevel;
-  // gift-specific: emoji stored separately so animations can use it directly
   final String? giftEmoji;
+  final String? nameColor;  // لون اسم المُرسِل (hex)
+  final String? textColor;  // لون نص الرسالة (hex)
 
   const RoomMessageModel({
     required this.id,
@@ -22,6 +23,8 @@ class RoomMessageModel {
     required this.createdAt,
     this.senderLevel = 1,
     this.giftEmoji,
+    this.nameColor,
+    this.textColor,
   });
 
   bool get isSystem => type == MessageType.system || type == MessageType.join || type == MessageType.leave;

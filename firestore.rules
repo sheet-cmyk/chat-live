@@ -72,12 +72,18 @@ service cloud.firestore {
       allow update: if isRoomHost(roomId)
         || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['onlineCount', 'announcement']))
-        // هدايا التحدي: أي مستخدم يستطيع زيادة challengeGiftTotal فقط (لا خصم)
+        // هدايا التحدي: زيادة challengeGiftTotal فقط
         || (isSignedIn()
             && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['challengeGiftTotal'])
             && request.resource.data.get('challengeGiftTotal', 0)
-               >= resource.data.get('challengeGiftTotal', 0));
+               >= resource.data.get('challengeGiftTotal', 0))
+        // إجمالي هدايا الغرفة للمستوى: زيادة totalGiftsRoom فقط
+        || (isSignedIn()
+            && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['totalGiftsRoom'])
+            && request.resource.data.get('totalGiftsRoom', 0)
+               >= resource.data.get('totalGiftsRoom', 0));
       allow delete: if isRoomHost(roomId) || isAdmin();
 
       // مقاعد الغرفة
@@ -104,6 +110,13 @@ service cloud.firestore {
       match /gifts/{giftId} {
         allow read: if isSignedIn();
         allow create: if isSignedIn();
+      }
+
+      // لوحة صدارة الهدايا (top gifters per room)
+      match /gift_leaderboard/{userId} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn() && userId == request.auth.uid;
+        allow delete: if false;
       }
 
       // كتم الدردشة — الإدارة والمضيف فقط
@@ -226,6 +239,14 @@ service cloud.firestore {
     match /gifts/{giftId} {
       allow read: if isSignedIn();
       allow write: if false;
+    }
+
+    // ── سجل الهدايا الدائم ────────────────────────────────────────
+    match /gift_log/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.senderId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // ── اشتراكات VIP ──────────────────────────────────────────────

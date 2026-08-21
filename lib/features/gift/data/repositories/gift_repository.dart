@@ -50,11 +50,56 @@ class GiftRepository {
         );
       }
 
-      // تحديث إجمالي هدايا التحدي في الغرفة (non-critical)
+      // تحديث إجمالي هدايا التحدي + إجمالي الغرفة الكلي (non-critical)
       try {
         await _db.collection('rooms').doc(roomId).update({
           'challengeGiftTotal': FieldValue.increment(totalDiamonds),
         });
+      } catch (_) {}
+      try {
+        await _db.collection('rooms').doc(roomId).update({
+          'totalGiftsRoom': FieldValue.increment(totalDiamonds),
+        });
+      } catch (_) {}
+
+      // تحديث إجمالي ما أرسله المستخدم من هدايا
+      try {
+        await _db.collection('users').doc(senderId).update({
+          'totalGiftsSent': FieldValue.increment(totalDiamonds),
+        });
+      } catch (_) {}
+
+      // سجل دائم في gift_log
+      try {
+        await _db.collection('gift_log').add({
+          'senderId': senderId,
+          'senderName': senderName,
+          'senderAvatar': senderAvatar,
+          'receiverId': receiverId,
+          'receiverName': receiverName,
+          'giftEmoji': gift.emoji,
+          'giftName': gift.name,
+          'diamonds': totalDiamonds,
+          'coinPrice': totalCost,
+          'quantity': quantity,
+          'roomId': roomId,
+          'sentAt': FieldValue.serverTimestamp(),
+        });
+      } catch (_) {}
+
+      // تحديث لوحة صدارة الغرفة (top gifters)
+      try {
+        await _db
+            .collection('rooms')
+            .doc(roomId)
+            .collection('gift_leaderboard')
+            .doc(senderId)
+            .set({
+          'senderName': senderName,
+          'senderAvatar': senderAvatar,
+          'total': FieldValue.increment(totalDiamonds),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       } catch (_) {}
 
       try {

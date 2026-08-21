@@ -173,6 +173,10 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
               }),
             ),
 
+          // ── كأس المتصدرين (بعد فتح الصندوق فقط) ───────────────────
+          if (_isBoxOpen && widget.roomId != null)
+            _TopGifters(roomId: widget.roomId!),
+
           // ── صندوق مغلق ↔ شبكة هدايا ────────────────────────────
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 350),
@@ -990,6 +994,100 @@ class _QuantityStrip extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  _TopGifters — أعلى المرسلين في الغرفة (كأس)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _TopGifters extends ConsumerWidget {
+  const _TopGifters({required this.roomId});
+  final String roomId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final leaders = ref.watch(roomGiftLeaderboardProvider(roomId)).valueOrNull;
+    if (leaders == null || leaders.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 6),
+            child: Text(
+              '🏆 أعلى المرسلين',
+              style: TextStyle(
+                color: Color(0xFFFFD700),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Cairo',
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 68,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: leaders.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (_, i) {
+                final l = leaders[i];
+                final medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor: const Color(0xFF2A2A44),
+                          backgroundImage:
+                              l.avatar != null ? NetworkImage(l.avatar!) : null,
+                          child: l.avatar == null
+                              ? Text(
+                                  l.name.isNotEmpty ? l.name[0].toUpperCase() : '؟',
+                                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                                )
+                              : null,
+                        ),
+                        Positioned(
+                          top: -4, right: -4,
+                          child: Text(medals[i], style: const TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    SizedBox(
+                      width: 52,
+                      child: Text(
+                        l.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 9, fontFamily: 'Cairo'),
+                      ),
+                    ),
+                    Text(
+                      '💎 ${_fmt(l.total)}',
+                      style: const TextStyle(
+                          color: Color(0xFF4CF0FF),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const Divider(color: Colors.white12, height: 12),
         ],
       ),
     );

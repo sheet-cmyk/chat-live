@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/chat_colors.dart';
 import '../../data/models/seat_model.dart';
 import '../providers/room_provider.dart';
 
@@ -163,7 +164,9 @@ class _SeatWidgetState extends State<SeatWidget>
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: seat.isEmpty ? AppColors.textHint : AppColors.textPrimary,
+                    color: (!seat.isEmpty && seat.nameColor != null)
+                        ? hexColor(seat.nameColor)
+                        : (seat.isEmpty ? AppColors.textHint : AppColors.textPrimary),
                     fontSize: widget.isHost ? 13 : 11,
                     fontFamily: 'Cairo',
                     fontWeight: widget.isHost ? FontWeight.w600 : FontWeight.normal,

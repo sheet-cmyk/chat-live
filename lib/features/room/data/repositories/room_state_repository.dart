@@ -37,6 +37,7 @@ class RoomStateRepository {
             isLocked: d['isLocked'] as bool? ?? false,
             userLevel: d['userLevel'] as int? ?? 1,
             userVip: d['userVip'] as int? ?? 0,
+            nameColor: d['nameColor'] as String?,
           );
         }
         return seats;
@@ -53,6 +54,7 @@ class RoomStateRepository {
       'isLocked': seat.isLocked,
       'userLevel': seat.userLevel,
       'userVip': seat.userVip,
+      'nameColor': seat.nameColor,
     });
   }
 
@@ -118,6 +120,8 @@ class RoomStateRepository {
                 createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
                 senderLevel: d['senderLevel'] as int? ?? 1,
                 giftEmoji: d['giftEmoji'] as String?,
+                nameColor: d['nameColor'] as String?,
+                textColor: d['textColor'] as String?,
               );
             }).toList());
   }
@@ -133,6 +137,8 @@ class RoomStateRepository {
       'senderLevel': msg.senderLevel,
     };
     if (msg.giftEmoji != null) data['giftEmoji'] = msg.giftEmoji;
+    if (msg.nameColor != null) data['nameColor'] = msg.nameColor;
+    if (msg.textColor != null) data['textColor'] = msg.textColor;
     await _messages(roomId).doc(msg.id).set(data);
   }
 

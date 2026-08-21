@@ -8,6 +8,7 @@ class SeatModel {
   final bool isSpeaking;
   final int userLevel;
   final int userVip;
+  final String? nameColor; // hex مثل 'FFD700' (ذهبي)
 
   const SeatModel({
     required this.index,
@@ -19,6 +20,7 @@ class SeatModel {
     this.isSpeaking = false,
     this.userLevel = 1,
     this.userVip = 0,
+    this.nameColor,
   });
 
   bool get isEmpty => userId == null;
@@ -32,6 +34,7 @@ class SeatModel {
     bool? isSpeaking,
     int? userLevel,
     int? userVip,
+    String? nameColor,
   }) {
     return SeatModel(
       index: index,
@@ -43,6 +46,7 @@ class SeatModel {
       isSpeaking: isSpeaking ?? this.isSpeaking,
       userLevel: userLevel ?? this.userLevel,
       userVip: userVip ?? this.userVip,
+      nameColor: nameColor ?? this.nameColor,
     );
   }
 

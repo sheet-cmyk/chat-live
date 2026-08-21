@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/chat_colors.dart';
 import '../../../../app/routes.dart';
 import '../providers/auth_provider.dart';
 import '../../../wallet/presentation/providers/wallet_provider.dart';
@@ -241,6 +242,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       _StatItem(icon: '⭐', value: 'Lv.${level.level}', label: 'المستوى'),
                     ]),
                   ),
+                  const SizedBox(height: 16),
+                  // Gift Level Bar
+                  _GiftLevelBar(profile: profile),
                   const SizedBox(height: 20),
                   // Buttons
                   _PBtn(icon: Icons.account_balance_wallet_rounded, label: 'محفظتي', color: AppColors.gold, onTap: () => context.push(AppRoutes.wallet)),
@@ -302,12 +306,16 @@ class _EditSheetState extends State<_EditSheet> {
   late final TextEditingController _nameCtrl;
   XFile? _roomFile;
   bool _loading = false;
+  String? _nameColorHex;
+  String? _textColorHex;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(
       text: widget.profile['displayName'] as String? ?? '');
+    _nameColorHex = widget.profile['nameColor'] as String?;
+    _textColorHex = widget.profile['textColor'] as String?;
   }
 
   @override
@@ -339,6 +347,9 @@ class _EditSheetState extends State<_EditSheet> {
           'users/${widget.uid}/room.jpg', _roomFile!.path);
         updates['roomPhoto'] = url;
       }
+
+      if (_nameColorHex != null) updates['nameColor'] = _nameColorHex;
+      if (_textColorHex != null) updates['textColor'] = _textColorHex;
 
       if (updates.isNotEmpty) {
         await FirebaseFirestore.instance
@@ -424,6 +435,20 @@ class _EditSheetState extends State<_EditSheet> {
                         ]),
             ),
           ),
+          const SizedBox(height: 16),
+
+          // Color pickers
+          _ColorPicker(
+            label: 'لون الاسم',
+            selectedHex: _nameColorHex,
+            onSelect: (h) => setState(() => _nameColorHex = h),
+          ),
+          const SizedBox(height: 14),
+          _ColorPicker(
+            label: 'لون الكتابة',
+            selectedHex: _textColorHex,
+            onSelect: (h) => setState(() => _textColorHex = h),
+          ),
           const SizedBox(height: 20),
 
           // Save
@@ -486,4 +511,148 @@ class _PBtn extends StatelessWidget {
       ),
     ),
   );
+}
+
+// ── Gift Level Bar ────────────────────────────────────────────────────────────
+
+class _GiftLevelBar extends StatelessWidget {
+  const _GiftLevelBar({required this.profile});
+  final Map<String, dynamic> profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalSent = (profile['totalGiftsSent'] as num?)?.toInt() ?? 0;
+    if (totalSent == 0) return const SizedBox.shrink();
+
+    final lvlIdx = giftSendLevelIndex(totalSent);
+    final lvl = kGiftSendLevels[lvlIdx];
+    final isMax = lvlIdx >= kGiftSendLevels.length - 1;
+    final nextMin = isMax ? lvl.$1 : kGiftSendLevels[lvlIdx + 1].$1;
+    final progress = isMax
+        ? 1.0
+        : ((totalSent - lvl.$1) / (nextMin - lvl.$1)).clamp(0.0, 1.0);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '${lvl.$3} راسل الهدايا',
+                  style: TextStyle(
+                    color: lvl.$4,
+                    fontFamily: 'Cairo',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'Lv.${lvlIdx + 1} · ${lvl.$2}',
+                  style: TextStyle(
+                    color: lvl.$4,
+                    fontSize: 11,
+                    fontFamily: 'Cairo',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+                backgroundColor: AppColors.surfaceLight,
+                valueColor: AlwaysStoppedAnimation<Color>(lvl.$4),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '💎 ${fmtDiamonds(totalSent)} أرسلت للناس',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontFamily: 'Cairo',
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Color Picker ──────────────────────────────────────────────────────────────
+
+class _ColorPicker extends StatelessWidget {
+  const _ColorPicker({
+    required this.label,
+    required this.selectedHex,
+    required this.onSelect,
+  });
+  final String label;
+  final String? selectedHex;
+  final void Function(String hex) onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontFamily: 'Cairo',
+            fontSize: 13,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: kChatColors.map((c) {
+            final isSelected = selectedHex == c.$1;
+            final clr = hexColor(c.$1);
+            return GestureDetector(
+              onTap: () => onSelect(c.$1),
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: clr,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? AppColors.primary : AppColors.divider,
+                    width: isSelected ? 2.5 : 1,
+                  ),
+                  boxShadow: isSelected
+                      ? [BoxShadow(color: clr.withAlpha(100), blurRadius: 8)]
+                      : null,
+                ),
+                child: isSelected
+                    ? Icon(
+                        Icons.check_rounded,
+                        color: clr.computeLuminance() > 0.5
+                            ? Colors.black87
+                            : Colors.white,
+                        size: 16,
+                      )
+                    : null,
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
 }

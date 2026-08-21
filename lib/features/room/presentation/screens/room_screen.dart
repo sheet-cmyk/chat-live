@@ -32,6 +32,8 @@ import '../widgets/user_profile_sheet.dart';
 import '../widgets/room_announcement_banner.dart';
 import '../widgets/sound_effects_panel.dart';
 import '../../../admin/presentation/providers/admin_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../app/theme/chat_colors.dart';
 
 class RoomScreen extends ConsumerStatefulWidget {
   const RoomScreen({super.key, required this.room});
@@ -96,11 +98,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
       // المضيف يجلس في المقعد 0 تلقائياً
       if (isHost) {
+        final hostProfile = ref.read(userProfileStreamProvider).valueOrNull;
         await ref.read(seatsWriterProvider(_roomId)).takeSeat(
           0,
           userId: me.uid,
           userName: me.displayName ?? 'مستخدم',
           userAvatar: me.photoURL,
+          nameColor: hostProfile?['nameColor'] as String?,
         );
         ref.read(myCurrentSeatProvider.notifier).state = 0;
       }
@@ -285,11 +289,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       ref.read(seatsWriterProvider(_roomId)).leaveSeatIfOwner(mySeat, me.uid);
     }
 
+    final seatProfile = ref.read(userProfileStreamProvider).valueOrNull;
     ref.read(seatsWriterProvider(_roomId)).takeSeat(
       seat.index,
       userId: me.uid,
       userName: me.displayName ?? 'مستخدم',
       userAvatar: me.photoURL,
+      nameColor: seatProfile?['nameColor'] as String?,
     );
     ref.read(myCurrentSeatProvider.notifier).state = seat.index;
     ZegoService().setMicMuted(false);
@@ -384,11 +390,14 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   void _sendMessage(String text) {
     final me = _currentUser;
     if (me == null || text.isEmpty) return;
+    final profile = ref.read(userProfileStreamProvider).valueOrNull;
     ref.read(chatWriterProvider(_roomId)).sendUserMessage(
       senderId: me.uid,
       senderName: me.displayName ?? 'مستخدم',
       senderAvatar: me.photoURL,
       content: text,
+      nameColor: profile?['nameColor'] as String?,
+      textColor: profile?['textColor'] as String?,
     );
   }
 
@@ -804,7 +813,7 @@ class _RoomBgPainter extends CustomPainter {
 }
 
 // ── رأس الغرفة ─────────────────────────────────────────────────────
-class _RoomHeader extends StatelessWidget {
+class _RoomHeader extends ConsumerWidget {
   const _RoomHeader({
     required this.room,
     required this.onMinimize,
@@ -819,7 +828,11 @@ class _RoomHeader extends StatelessWidget {
   final VoidCallback? onSettings;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final totalGifts = ref.watch(roomTotalGiftsProvider(room.roomId)).valueOrNull ?? 0;
+    final lvlIdx = giftSendLevelIndex(totalGifts);
+    final lvl = kRoomLevels[lvlIdx];
+
     return SafeArea(
       bottom: false,
       child: Padding(
@@ -843,14 +856,34 @@ class _RoomHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    room.name,
-                    style: const TextStyle(
-                      color: Colors.white, fontSize: 15,
-                      fontWeight: FontWeight.w700, fontFamily: 'Cairo',
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          room.name,
+                          style: const TextStyle(
+                            color: Colors.white, fontSize: 15,
+                            fontWeight: FontWeight.w700, fontFamily: 'Cairo',
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      // شارة مستوى الغرفة
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: lvl.$4.withAlpha(40),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: lvl.$4.withAlpha(120), width: 1),
+                        ),
+                        child: Text(
+                          '${lvl.$3} Lv.${lvlIdx + 1}',
+                          style: TextStyle(color: lvl.$4, fontSize: 10, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
                   ),
                   Row(
                     children: [

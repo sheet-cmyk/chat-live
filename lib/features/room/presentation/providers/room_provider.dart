@@ -6,6 +6,15 @@ import '../../data/models/room_message_model.dart';
 import '../../data/repositories/room_state_repository.dart';
 import '../../../home/data/models/room_model.dart';
 
+// بيانات الراسل الأعلى في لوحة الهدايا
+class GiftLeader {
+  final String userId;
+  final String name;
+  final String? avatar;
+  final int total;
+  const GiftLeader(this.userId, this.name, this.avatar, this.total);
+}
+
 // الغرفة الحالية
 final currentRoomProvider = StateProvider<RoomModel?>((ref) => null);
 
@@ -42,6 +51,7 @@ class SeatsWriter {
     String? userAvatar,
     int userLevel = 1,
     int userVip = 0,
+    String? nameColor,
   }) async {
     await _repo.takeSeat(
       _roomId,
@@ -52,6 +62,7 @@ class SeatsWriter {
         userAvatar: userAvatar,
         userLevel: userLevel,
         userVip: userVip,
+        nameColor: nameColor,
       ),
     );
   }
@@ -103,6 +114,8 @@ class _ChatWriter {
     String? senderAvatar,
     required String content,
     int level = 1,
+    String? nameColor,
+    String? textColor,
   }) async {
     await _repo.sendMessage(
       _roomId,
@@ -115,6 +128,8 @@ class _ChatWriter {
         type: MessageType.text,
         createdAt: DateTime.now(),
         senderLevel: level,
+        nameColor: nameColor,
+        textColor: textColor,
       ),
     );
   }
@@ -227,4 +242,44 @@ final challengeEndTimeProvider = StreamProvider.family<DateTime?, String>((ref, 
         final ts = data['challengeEndTime'] as Timestamp?;
         return ts?.toDate();
       });
+});
+
+// ── إجمالي هدايا الغرفة (لحساب مستوى الغرفة) ─────────────────────
+final roomTotalGiftsProvider = StreamProvider.family<int, String>((ref, roomId) {
+  return FirebaseFirestore.instance
+      .collection('rooms')
+      .doc(roomId)
+      .snapshots()
+      .map((doc) => (doc.data()?['totalGiftsRoom'] as num?)?.toInt() ?? 0);
+});
+
+// ── لوحة صدارة الهدايا في الغرفة (top 5 senders) ─────────────────
+final roomGiftLeaderboardProvider =
+    StreamProvider.family<List<GiftLeader>, String>((ref, roomId) {
+  return FirebaseFirestore.instance
+      .collection('rooms')
+      .doc(roomId)
+      .collection('gift_leaderboard')
+      .orderBy('total', descending: true)
+      .limit(5)
+      .snapshots()
+      .map((snap) => snap.docs.map((doc) {
+            final d = doc.data();
+            return GiftLeader(
+              doc.id,
+              d['senderName'] as String? ?? 'مستخدم',
+              d['senderAvatar'] as String?,
+              (d['total'] as num?)?.toInt() ?? 0,
+            );
+          }).toList());
+});
+
+// ── إجمالي ما أرسله المستخدم من هدايا ────────────────────────────
+final userTotalSentProvider = StreamProvider.family<int, String>((ref, userId) {
+  if (userId.isEmpty) return const Stream.empty();
+  return FirebaseFirestore.instance
+      .collection('users')
+      .doc(userId)
+      .snapshots()
+      .map((doc) => (doc.data()?['totalGiftsSent'] as num?)?.toInt() ?? 0);
 });

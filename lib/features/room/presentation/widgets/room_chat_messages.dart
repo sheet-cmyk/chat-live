@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/chat_colors.dart';
 import '../../data/models/room_message_model.dart';
 
 typedef UserTapCallback = void Function(String userId, String userName, String? avatar);
@@ -146,8 +147,10 @@ class _UserMessage extends StatelessWidget {
                         onTap: () => _tapUser(),
                         child: Text(
                           '${msg.senderName ?? ''} ',
-                          style: const TextStyle(
-                            color: AppColors.primaryLight,
+                          style: TextStyle(
+                            color: msg.nameColor != null
+                                ? hexColor(msg.nameColor)
+                                : AppColors.primaryLight,
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                             fontFamily: 'Cairo',
@@ -157,8 +160,10 @@ class _UserMessage extends StatelessWidget {
                     ),
                     TextSpan(
                       text: msg.content,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
+                      style: TextStyle(
+                        color: msg.textColor != null
+                            ? hexColor(msg.textColor)
+                            : AppColors.textPrimary,
                         fontSize: 12,
                         fontFamily: 'Cairo',
                       ),
