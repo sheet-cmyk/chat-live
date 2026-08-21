@@ -226,14 +226,14 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       setState(() => _highlight = step % 8);
       step++;
       int ms;
-      if (step < 12) {
-        ms = 70;
-      } else if (step < 20) {
-        ms = 100 + (step - 12) * 25;
+      if (step < 8) {
+        ms = 50;
+      } else if (step < 14) {
+        ms = 65 + (step - 8) * 18; // 65→173 ms
       } else {
-        ms = 340;
+        ms = 175;
       }
-      if (step >= 25) { _landOnWinner(winnerIndex, step, roundId); return; }
+      if (step >= 18) { _landOnWinner(winnerIndex, step, roundId); return; }
       _t2 = Timer(Duration(milliseconds: ms), tick);
     }
     tick();
@@ -244,13 +244,13 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     int diff = (winnerIndex - cur + 8) % 8;
     if (diff == 0) diff = 8;
     int landed = 0;
-    _t2 = Timer.periodic(const Duration(milliseconds: 340), (t) {
+    _t2 = Timer.periodic(const Duration(milliseconds: 160), (t) {
       if (!mounted) { t.cancel(); return; }
       landed++;
       setState(() => _highlight = (cur + landed) % 8);
       if (landed >= diff) {
         t.cancel();
-        Future.delayed(const Duration(milliseconds: 600), () {
+        Future.delayed(const Duration(milliseconds: 280), () {
           if (mounted) _repo.tryTransitionToResult(roundId, winnerIndex);
         });
       }
