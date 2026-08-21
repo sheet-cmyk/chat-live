@@ -449,6 +449,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     final messagesAsync = ref.watch(roomChatStreamProvider(_roomId));
     final messages = messagesAsync.valueOrNull ?? [];
     final isHost = ref.watch(isHostProvider);
+    final challengeActive = ref.watch(challengeEndTimeProvider(_roomId)).valueOrNull != null;
 
     // ── مزامنة حالة المقعد من Firestore إلى Zego ──────────────────
     // Handles: host muting a user, and detecting when kicked from seat.
@@ -567,6 +568,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                     isMe: seats[0].userId == _currentUser?.uid,
                     onTap: () => _onSeatTap(seats[0]),
                     emojiTrigger: _seatEmoji[0],
+                    challengeActive: challengeActive,
                   ),
                 ),
 
@@ -591,6 +593,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                         isMe: seat.userId == _currentUser?.uid,
                         onTap: () => _onSeatTap(seat),
                         emojiTrigger: _seatEmoji[seat.index],
+                        challengeActive: challengeActive,
                       );
                     },
                   ),

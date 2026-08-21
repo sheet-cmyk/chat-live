@@ -23,6 +23,7 @@ class SeatWidget extends StatefulWidget {
     this.isMe = false,
     this.onTap,
     this.emojiTrigger,
+    this.challengeActive = false,
   });
 
   final SeatModel seat;
@@ -30,6 +31,7 @@ class SeatWidget extends StatefulWidget {
   final bool isMe;
   final VoidCallback? onTap;
   final EmojiTrigger? emojiTrigger;
+  final bool challengeActive;
 
   @override
   State<SeatWidget> createState() => _SeatWidgetState();
@@ -174,7 +176,11 @@ class _SeatWidgetState extends State<SeatWidget>
                 ),
               ),
               if (!seat.isEmpty && seat.userId != null)
-                _DiamondBar(userId: seat.userId!, isHost: widget.isHost),
+                _DiamondBar(
+                  userId: seat.userId!,
+                  isHost: widget.isHost,
+                  challengeActive: widget.challengeActive,
+                ),
             ],
           ),
 
@@ -262,9 +268,14 @@ class _SeatWidgetState extends State<SeatWidget>
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _DiamondBar extends ConsumerWidget {
-  const _DiamondBar({required this.userId, this.isHost = false});
+  const _DiamondBar({
+    required this.userId,
+    this.isHost = false,
+    this.challengeActive = false,
+  });
   final String userId;
   final bool isHost;
+  final bool challengeActive;
 
   static const _tiers = [
     (5000000, Color(0xFFFF2D55)),   // أحمر — 5M+
@@ -289,8 +300,25 @@ class _DiamondBar extends ConsumerWidget {
       if (diamonds >= threshold) { color = c; break; }
     }
 
-    final label = _fmt(diamonds);
     final fontSize = isHost ? 10.0 : 9.0;
+
+    // بدون تحدٍّ نشط: يُظهر الشريط الملون فقط (بدون رقم)
+    if (!challengeActive) {
+      if (color == null) return const SizedBox.shrink();
+      return Container(
+        height: 3,
+        width: isHost ? 52.0 : 42.0,
+        margin: const EdgeInsets.only(top: 3),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(2),
+          boxShadow: [BoxShadow(color: color.withAlpha(160), blurRadius: 5)],
+        ),
+      );
+    }
+
+    // تحدٍّ نشط: شريط + رقم
+    final label = _fmt(diamonds);
 
     if (color == null) {
       return Padding(
