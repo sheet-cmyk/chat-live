@@ -301,23 +301,6 @@ class _DiamondBar extends ConsumerWidget {
     }
 
     final fontSize = isHost ? 10.0 : 9.0;
-
-    // بدون تحدٍّ نشط: يُظهر الشريط الملون فقط (بدون رقم)
-    if (!challengeActive) {
-      if (color == null) return const SizedBox.shrink();
-      return Container(
-        height: 3,
-        width: isHost ? 52.0 : 42.0,
-        margin: const EdgeInsets.only(top: 3),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(2),
-          boxShadow: [BoxShadow(color: color.withAlpha(160), blurRadius: 5)],
-        ),
-      );
-    }
-
-    // تحدٍّ نشط: شريط + رقم
     final label = _fmt(diamonds);
 
     if (color == null) {
