@@ -583,14 +583,12 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                           bottom: 6, left: 0, right: 0,
                           child: Center(
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: _kGold,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: const BoxDecoration(),
                               child: Text('×${food.mult}',
-                                style: const TextStyle(color: _kDarkBrown, fontSize: 11,
-                                  fontWeight: FontWeight.w900)),
+                                style: const TextStyle(color: _kBrightGold, fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                  shadows: [Shadow(color: Colors.black, blurRadius: 4, offset: Offset(0, 1))])),
                             ),
                           ),
                         ),
