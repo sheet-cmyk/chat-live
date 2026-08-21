@@ -215,15 +215,35 @@ class GreedyStarRepository {
         if (!snap.exists) return;
         final d = snap.data() as Map<String, dynamic>;
         if (d['phase'] != 'betting' || (d['roundId'] as num).toInt() != roundId) return;
-        winner = _pickWinner();
+        // استخدم الفائز المحدد من الأدمن إن وجد، وإلا عشوائي
+        final forced = (d['forcedWinner'] as num?)?.toInt();
+        winner = (forced != null && forced >= 0 && forced < 8) ? forced : _pickWinner();
         t.update(_game, {
           'phase': 'spinning', 'winnerIndex': winner,
           'phaseStartAt': FieldValue.serverTimestamp(),
+          'forcedWinner': FieldValue.delete(), // يُحذف بعد الاستخدام
         });
       });
     } catch (_) {}
     return winner;
   }
+
+  // يُستدعى من لوحة الأدمن لتحديد الفائز القادم
+  Future<void> setForcedWinner(int? foodIndex) async {
+    try {
+      if (foodIndex == null) {
+        await _game.update({'forcedWinner': FieldValue.delete()});
+      } else {
+        await _game.update({'forcedWinner': foodIndex});
+      }
+    } catch (_) {}
+  }
+
+  // يُستخدم في لوحة الأدمن لمراقبة الحالة الحالية
+  Stream<Map<String, dynamic>?> watchGameState() => _game.snapshots().map((s) {
+    if (!s.exists) return null;
+    return s.data() as Map<String, dynamic>;
+  });
 
   Future<bool> tryTransitionToResult(int roundId, int winnerIndex) async {
     // Compute top winners from multi-item bets

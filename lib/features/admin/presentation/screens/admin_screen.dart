@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../data/repositories/admin_repository.dart';
 import '../../../wallet/presentation/providers/wallet_provider.dart';
+import '../../../game/data/repositories/greedy_star_repository.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({super.key});
@@ -22,7 +23,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
+    _tab = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -55,6 +56,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
           tabs: const [
             Tab(icon: Icon(Icons.people_rounded, size: 18), text: 'المستخدمون'),
             Tab(icon: Icon(Icons.meeting_room_rounded, size: 18), text: 'الغرف'),
+            Tab(icon: Icon(Icons.casino_rounded, size: 18), text: 'اللعبة'),
           ],
         ),
       ),
@@ -67,6 +69,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
               children: [
                 _UsersTab(search: _searchText, searchCtrl: _search, onSearch: (v) => setState(() => _searchText = v)),
                 const _RoomsTab(),
+                const _GreedyStarTab(),
               ],
             ),
           ),
@@ -692,5 +695,204 @@ class _RoomTile extends StatelessWidget {
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')), backgroundColor: Colors.red));
     }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// تاب اللعبة — تحكم الأدمن في فائز جولة Greedy Star القادمة
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _GreedyStarTab extends StatefulWidget {
+  const _GreedyStarTab();
+  @override
+  State<_GreedyStarTab> createState() => _GreedyStarTabState();
+}
+
+class _GreedyStarTabState extends State<_GreedyStarTab> {
+  final _repo = GreedyStarRepository();
+
+  static const _foods = <(String emoji, String name, int mult, bool hot)>[
+    ('🥕', 'جزر',    5,  false),
+    ('🍤', 'جمبري', 10,  false),
+    ('🍅', 'طماطم',  5,  false),
+    ('🍗', 'دجاج',  15,  false),
+    ('🌽', 'ذرة',    5,  false),
+    ('🥩', 'لحم',   25,  false),
+    ('🥦', 'بروكلي', 5,  false),
+    ('🐟', 'سمك',   45,  true),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: _repo.watchGameState(),
+      builder: (context, snap) {
+        final data = snap.data;
+        final phase = data?['phase'] as String? ?? '...';
+        final roundId = (data?['roundId'] as num?)?.toInt() ?? '-';
+        final forcedWinner = (data?['forcedWinner'] as num?)?.toInt();
+
+        return ListView(
+          padding: const EdgeInsets.all(14),
+          children: [
+            // ── معلومات الجولة الحالية ──
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A0A2E),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.amber.withAlpha(120)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.casino_rounded, color: Colors.amber, size: 20),
+                const SizedBox(width: 8),
+                Text('جولة #$roundId',
+                  style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 14)),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: phase == 'betting' ? Colors.green.withAlpha(60)
+                        : phase == 'spinning' ? Colors.orange.withAlpha(60)
+                        : Colors.blue.withAlpha(60),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: phase == 'betting' ? Colors.green
+                        : phase == 'spinning' ? Colors.orange : Colors.blue),
+                  ),
+                  child: Text(
+                    phase == 'betting' ? '🟢 رهان' : phase == 'spinning' ? '🔄 دوران' : phase == 'result' ? '🏁 نتيجة' : phase,
+                    style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ]),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ── الفائز الحالي المحدد ──
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: forcedWinner != null
+                    ? Colors.amber.withAlpha(20)
+                    : Colors.white.withAlpha(8),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: forcedWinner != null ? Colors.amber : Colors.white24,
+                ),
+              ),
+              child: Row(children: [
+                Text(
+                  forcedWinner != null ? '⚡ الفائز القادم المحدد:' : '🎲 الجولة القادمة: عشوائي',
+                  style: TextStyle(
+                    color: forcedWinner != null ? Colors.amber : Colors.white54,
+                    fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 13,
+                  ),
+                ),
+                if (forcedWinner != null) ...[
+                  const SizedBox(width: 8),
+                  Text(_foods[forcedWinner].$1, style: const TextStyle(fontSize: 22)),
+                  const SizedBox(width: 4),
+                  Text(_foods[forcedWinner].$2,
+                    style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 14)),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => _setWinner(null),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withAlpha(60),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.red),
+                      ),
+                      child: const Text('إلغاء', style: TextStyle(color: Colors.red, fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 12)),
+                    ),
+                  ),
+                ],
+              ]),
+            ),
+
+            const SizedBox(height: 16),
+
+            const Text('اختر الفائز للجولة القادمة:',
+              style: TextStyle(color: Colors.white70, fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 13)),
+            const SizedBox(height: 8),
+
+            // ── قائمة الخضار ──
+            ...List.generate(_foods.length, (i) {
+              final (emoji, name, mult, hot) = _foods[i];
+              final isSelected = forcedWinner == i;
+              return GestureDetector(
+                onTap: () => _setWinner(isSelected ? null : i),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.amber.withAlpha(30) : const Color(0xFF1A0A2E),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isSelected ? Colors.amber : Colors.white24,
+                      width: isSelected ? 2 : 1,
+                    ),
+                    boxShadow: isSelected
+                        ? [BoxShadow(color: Colors.amber.withAlpha(80), blurRadius: 10)]
+                        : [],
+                  ),
+                  child: Row(children: [
+                    Text(emoji, style: const TextStyle(fontSize: 28)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(name,
+                          style: TextStyle(
+                            color: isSelected ? Colors.amber : Colors.white,
+                            fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 15,
+                          )),
+                        if (hot)
+                          const Text('HOT 🔥', style: TextStyle(color: Colors.redAccent, fontFamily: 'Cairo', fontSize: 11)),
+                      ]),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.amber.withAlpha(60) : Colors.white.withAlpha(15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: isSelected ? Colors.amber : Colors.white24),
+                      ),
+                      child: Text('×$mult',
+                        style: TextStyle(
+                          color: isSelected ? Colors.amber : Colors.white70,
+                          fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 14,
+                        )),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                      color: isSelected ? Colors.amber : Colors.white24,
+                      size: 22,
+                    ),
+                  ]),
+                ),
+              );
+            }),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _setWinner(int? index) async {
+    await _repo.setForcedWinner(index);
+    if (!mounted) return;
+    final name = index != null ? _foods[index].$2 : null;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(
+        name != null ? '✅ تم تحديد $name فائزاً للجولة القادمة' : '🎲 الجولة القادمة ستكون عشوائية',
+        style: const TextStyle(fontFamily: 'Cairo'),
+      ),
+      backgroundColor: index != null ? Colors.amber.shade700 : Colors.grey.shade700,
+      duration: const Duration(seconds: 2),
+    ));
   }
 }
