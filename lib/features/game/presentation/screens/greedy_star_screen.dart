@@ -511,7 +511,6 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
     final myBetAmt = _effectiveBet?.amountFor(i) ?? 0;
     final isHighlighted = _highlight == i;
     final isWinner = _state?.winnerIndex == i && _localPhase == 'result';
-    final betterCount = _betterCounts[i] ?? 0;
     final canBet = _localPhase == 'betting';
 
     Widget bubble = AnimatedBuilder(
@@ -573,15 +572,6 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
                         ),
                       ]),
               ),
-              // Betters count badge
-              if (betterCount > 0)
-                Positioned(top: -5, right: -5,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(color: Colors.indigo.shade700, borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white, width: 1)),
-                    child: Text('$betterCount', style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900)),
-                  )),
               // HOT badge
               if (food.hot)
                 Positioned(top: 2, left: -3,
