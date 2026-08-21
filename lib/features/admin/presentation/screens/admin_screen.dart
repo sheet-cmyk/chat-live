@@ -49,6 +49,8 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
         iconTheme: const IconThemeData(color: Colors.white),
         bottom: TabBar(
           controller: _tab,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           labelColor: Colors.amber,
           unselectedLabelColor: Colors.white54,
           indicatorColor: Colors.amber,
@@ -56,7 +58,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
           tabs: const [
             Tab(icon: Icon(Icons.people_rounded, size: 18), text: 'المستخدمون'),
             Tab(icon: Icon(Icons.meeting_room_rounded, size: 18), text: 'الغرف'),
-            Tab(icon: Icon(Icons.casino_rounded, size: 18), text: 'اللعبة'),
+            Tab(icon: Icon(Icons.casino_rounded, size: 18), text: 'اللعبة 🎮'),
           ],
         ),
       ),
@@ -727,9 +729,15 @@ class _GreedyStarTabState extends State<_GreedyStarTab> {
     return StreamBuilder<Map<String, dynamic>?>(
       stream: _repo.watchGameState(),
       builder: (context, snap) {
+        if (snap.hasError) {
+          return Center(child: Text('خطأ: ${snap.error}', style: const TextStyle(color: Colors.red, fontFamily: 'Cairo')));
+        }
+        if (!snap.hasData && snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: Colors.amber));
+        }
         final data = snap.data;
         final phase = data?['phase'] as String? ?? '...';
-        final roundId = (data?['roundId'] as num?)?.toInt() ?? '-';
+        final roundId = data?['roundId']?.toString() ?? '-';
         final forcedWinner = (data?['forcedWinner'] as num?)?.toInt();
 
         return ListView(
