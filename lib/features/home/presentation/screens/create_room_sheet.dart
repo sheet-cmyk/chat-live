@@ -39,6 +39,7 @@ class _CreateRoomSheetState extends ConsumerState<CreateRoomSheet> {
   RoomType _selectedType = RoomType.chat;
   bool _isLocked = false;
   bool _isLoading = false;
+  int _maxSeats = 5;
 
   @override
   void dispose() {
@@ -59,6 +60,7 @@ class _CreateRoomSheetState extends ConsumerState<CreateRoomSheet> {
         hostName: user.displayName ?? 'مضيف',
         hostAvatar: user.photoURL,
         isLocked: _isLocked,
+        maxSeats: _maxSeats,
         createdAt: DateTime.now(),
       );
       await ref.read(roomRepositoryProvider).createRoom(room);
@@ -140,6 +142,41 @@ class _CreateRoomSheetState extends ConsumerState<CreateRoomSheet> {
                           fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
                         )),
                       ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 16),
+
+          // عدد المقاعد
+          const Text('عدد المقاعد', style: TextStyle(color: AppColors.textSecondary, fontSize: 13, fontFamily: 'Cairo')),
+          const SizedBox(height: 8),
+          Row(
+            children: [3, 5, 10, 20, 25].map((n) {
+              final isSelected = _maxSeats == n;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() => _maxSeats = n),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.only(left: 6),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.primary.withAlpha(40) : AppColors.surfaceLight,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: isSelected ? AppColors.primary : AppColors.divider),
+                    ),
+                    child: Text(
+                      '$n',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontFamily: 'Cairo',
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                        color: isSelected ? AppColors.primary : AppColors.textHint,
+                      ),
                     ),
                   ),
                 ),

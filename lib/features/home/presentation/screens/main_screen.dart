@@ -237,7 +237,6 @@ class _BottomNav extends ConsumerWidget {
     final unread = ref.watch(totalUnreadProvider);
 
     return Container(
-      height: 72,
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: const Color(0xFF3C4043).withAlpha(18))),
@@ -245,15 +244,21 @@ class _BottomNav extends ConsumerWidget {
           BoxShadow(color: const Color(0xFF3C4043).withAlpha(18), blurRadius: 16, offset: const Offset(0, -4)),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _NavItem(icon: Icons.home_rounded,        label: 'الرئيسية', index: 0, current: currentIndex),
-          _NavItem(icon: Icons.chat_bubble_rounded, label: 'الرسائل',  index: 1, current: currentIndex, badge: unread > 0 ? unread : null),
-          const SizedBox(width: 56),
-          _NavItem(icon: Icons.leaderboard_rounded, label: 'الترتيب',  index: 2, current: currentIndex),
-          _NavItem(icon: Icons.person_rounded,      label: 'حسابي',    index: 3, current: currentIndex),
-        ],
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 72,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _NavItem(icon: Icons.home_rounded,        label: 'الرئيسية', index: 0, current: currentIndex),
+              _NavItem(icon: Icons.chat_bubble_rounded, label: 'الرسائل',  index: 1, current: currentIndex, badge: unread > 0 ? unread : null),
+              const SizedBox(width: 56),
+              _NavItem(icon: Icons.leaderboard_rounded, label: 'الترتيب',  index: 2, current: currentIndex),
+              _NavItem(icon: Icons.person_rounded,      label: 'حسابي',    index: 3, current: currentIndex),
+            ],
+          ),
+        ),
       ),
     );
   }

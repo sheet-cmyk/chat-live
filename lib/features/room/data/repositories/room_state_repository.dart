@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/seat_model.dart';
 import '../models/room_message_model.dart';
+import '../models/pk_state.dart';
 
 class RoomStateRepository {
   static final RoomStateRepository _i = RoomStateRepository._();
@@ -18,15 +19,29 @@ class RoomStateRepository {
   CollectionReference _members(String roomId) =>
       _db.collection('rooms').doc(roomId).collection('members');
 
+  // ── عدد الأعضاء الحاليين في الغرفة ─────────────────────────
+  Stream<int> watchMemberCount(String roomId) {
+    return _members(roomId).snapshots().map((snap) => snap.size);
+  }
+
+  // ── قائمة الأعضاء الحاليين ──────────────────────────────────
+  Stream<List<Map<String, dynamic>>> watchMembers(String roomId) {
+    return _members(roomId)
+        .orderBy('joinedAt', descending: false)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => d.data() as Map<String, dynamic>)
+            .toList());
+  }
+
   // ── مقاعد ───────────────────────────────────────────────────
-  Stream<List<SeatModel>> watchSeats(String roomId) {
+  Stream<List<SeatModel>> watchSeats(String roomId, {int maxSeats = 9}) {
     return _seats(roomId).orderBy(FieldPath.documentId).snapshots().map(
       (snap) {
-        // ابدأ بـ 9 مقاعد فارغة ثم ملأها من Firestore
-        final seats = List.generate(9, (i) => SeatModel(index: i));
+        final seats = List.generate(maxSeats, (i) => SeatModel(index: i));
         for (final doc in snap.docs) {
           final idx = int.tryParse(doc.id);
-          if (idx == null || idx < 0 || idx > 8) continue;
+          if (idx == null || idx < 0 || idx >= maxSeats) continue;
           final d = doc.data() as Map<String, dynamic>;
           seats[idx] = SeatModel(
             index: idx,
@@ -209,6 +224,16 @@ class RoomStateRepository {
     await _db.collection('rooms').doc(roomId).update({'name': newName});
   }
 
+  Future<void> updateMaxSeats(String roomId, int maxSeats) async {
+    await _db.collection('rooms').doc(roomId).update({'maxSeats': maxSeats});
+  }
+
+  Stream<int> watchRoomMaxSeats(String roomId) {
+    return _db.collection('rooms').doc(roomId).snapshots().map(
+      (doc) => (doc.data()?['maxSeats'] as num?)?.toInt() ?? 9,
+    );
+  }
+
   Future<void> activateChallenge(String roomId, DateTime endTime) async {
     await _db.collection('rooms').doc(roomId).update({
       'challengeActive': true,
@@ -222,5 +247,46 @@ class RoomStateRepository {
       'challengeActive': false,
       'challengeEndTime': FieldValue.delete(),
     });
+  }
+
+  // ── PK Battle ─────────────────────────────────────────────────
+  Future<void> startPK(String roomId, int durationMinutes) async {
+    final end = DateTime.now().add(Duration(minutes: durationMinutes));
+    await _db.collection('rooms').doc(roomId).update({
+      'pkActive': true,
+      'pkEndTime': Timestamp.fromDate(end),
+      'pkTeamA': 0,
+      'pkTeamB': 0,
+    });
+  }
+
+  Future<void> stopPK(String roomId) async {
+    await _db.collection('rooms').doc(roomId).update({
+      'pkActive': false,
+      'pkEndTime': FieldValue.delete(),
+      'pkTeamA': 0,
+      'pkTeamB': 0,
+    });
+  }
+
+  Stream<PKState?> watchPKState(String roomId) {
+    return _db.collection('rooms').doc(roomId).snapshots().map((doc) {
+      final d = doc.data();
+      if (d == null || d['pkActive'] != true) return null;
+      return PKState(
+        active: true,
+        endTime: (d['pkEndTime'] as Timestamp?)?.toDate(),
+        teamA: (d['pkTeamA'] as num?)?.toInt() ?? 0,
+        teamB: (d['pkTeamB'] as num?)?.toInt() ?? 0,
+      );
+    });
+  }
+
+  Future<void> addPKDiamonds(String roomId, String team, int amount) async {
+    try {
+      await _db.collection('rooms').doc(roomId).update({
+        'pkTeam$team': FieldValue.increment(amount),
+      });
+    } catch (_) {}
   }
 }

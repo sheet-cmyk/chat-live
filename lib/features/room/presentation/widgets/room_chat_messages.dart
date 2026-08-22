@@ -131,13 +131,14 @@ class _UserMessage extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.black.withAlpha(100),
+                color: const Color(0xFF00C853).withAlpha(35),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(14),
                   topRight: Radius.circular(14),
                   bottomLeft: Radius.circular(14),
                   bottomRight: Radius.circular(4),
                 ),
+                border: Border.all(color: const Color(0xFF00C853).withAlpha(50), width: 0.5),
               ),
               child: RichText(
                 text: TextSpan(
@@ -163,7 +164,7 @@ class _UserMessage extends StatelessWidget {
                       style: TextStyle(
                         color: msg.textColor != null
                             ? hexColor(msg.textColor)
-                            : AppColors.textPrimary,
+                            : const Color(0xFFFFD700),
                         fontSize: 12,
                         fontFamily: 'Cairo',
                       ),

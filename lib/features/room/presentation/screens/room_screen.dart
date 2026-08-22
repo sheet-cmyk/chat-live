@@ -31,6 +31,7 @@ import '../../data/repositories/room_state_repository.dart';
 import '../widgets/user_profile_sheet.dart';
 import '../widgets/room_announcement_banner.dart';
 import '../widgets/sound_effects_panel.dart';
+import '../widgets/pk_bar.dart';
 import '../../../admin/presentation/providers/admin_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../app/theme/chat_colors.dart';
@@ -43,7 +44,8 @@ class RoomScreen extends ConsumerStatefulWidget {
   ConsumerState<RoomScreen> createState() => _RoomScreenState();
 }
 
-class _RoomScreenState extends ConsumerState<RoomScreen> {
+class _RoomScreenState extends ConsumerState<RoomScreen>
+    with WidgetsBindingObserver {
   final _scrollCtrl = ScrollController();
   final _currentUser = FirebaseAuth.instance.currentUser;
   late final String _roomId;
@@ -61,6 +63,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     _roomId = widget.room.roomId;
     _coverImageUrl = widget.room.coverImage;
     _joinedAt = DateTime.now();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _initRoom());
   }
 
@@ -96,19 +99,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         if (ann.isNotEmpty) setState(() => _announcement = ann);
       }
 
-      // المضيف يجلس في المقعد 0 تلقائياً
-      if (isHost) {
-        final hostProfile = ref.read(userProfileStreamProvider).valueOrNull;
-        await ref.read(seatsWriterProvider(_roomId)).takeSeat(
-          0,
-          userId: me.uid,
-          userName: me.displayName ?? 'مستخدم',
-          userAvatar: me.photoURL,
-          nameColor: hostProfile?['nameColor'] as String?,
-        );
-        ref.read(myCurrentSeatProvider.notifier).state = 0;
-      }
-
       // أرسل رسالة انضمام
       await ref.read(chatWriterProvider(_roomId)).sendSystem(
         '${me.displayName ?? 'مستخدم'} انضم للغرفة 🎉',
@@ -128,15 +118,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         userName: me.displayName ?? 'مستخدم',
       );
 
-      // Zego starts with mic muted — sync provider state to match reality.
-      if (isHost) {
-        // Host auto-unmutes on seat 0.
-        await zego.setMicMuted(false);
-        ref.read(isMicMutedProvider.notifier).state = false;
-      } else {
-        // Non-host: mic stays muted until they take a seat.
-        ref.read(isMicMutedProvider.notifier).state = true;
-      }
+      // mic stays muted until user takes a seat
+      ref.read(isMicMutedProvider.notifier).state = true;
 
       await zego.startSoundLevelMonitor();
 
@@ -162,40 +145,45 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     };
     zego.onUserLeft = (userId) async {
       if (!mounted) return;
-      final seats = ref.read(seatsProvider(_roomId));
-      final seat = seats.firstWhere(
-        (s) => s.userId == userId,
-        orElse: () => const SeatModel(index: -1),
-      );
-      if (seat.index >= 0) {
-        // Only clear if still owned by that user (prevents race with re-join).
-        await ref.read(seatsWriterProvider(_roomId)).leaveSeatIfOwner(seat.index, userId);
-        if (seat.index == ref.read(myCurrentSeatProvider)) {
-          ref.read(myCurrentSeatProvider.notifier).state = -1;
+      try {
+        final seats = ref.read(seatsProvider(_roomId));
+        final seat = seats.firstWhere(
+          (s) => s.userId == userId,
+          orElse: () => const SeatModel(index: -1),
+        );
+        if (seat.index >= 0) {
+          await ref.read(seatsWriterProvider(_roomId)).leaveSeatIfOwner(seat.index, userId);
+          if (seat.index == ref.read(myCurrentSeatProvider)) {
+            ref.read(myCurrentSeatProvider.notifier).state = -1;
+          }
         }
-      }
+      } catch (_) {}
     };
 
     zego.onAudioLevel = (levels) {
       if (!mounted) return;
-      ref.read(speakingUsersProvider.notifier).state = {
-        for (final e in levels.entries)
-          if (e.value > 10) e.key,
-      };
+      try {
+        ref.read(speakingUsersProvider.notifier).state = {
+          for (final e in levels.entries)
+            if (e.value > 10) e.key,
+        };
+      } catch (_) {}
     };
   }
 
-  // تصغير الغرفة لفقاعة عائمة بدلاً من الخروج الكلي
+  // تصغير الغرفة لفقاعة عائمة — ينزل من المايك تلقائياً
   void _minimizeRoom() {
     final me = _currentUser;
     if (me == null) {
       Navigator.of(context).pop();
       return;
     }
+    // ينزل من المقعد عند التصغير أو الانتقال لغرفة ثانية
+    _leaveSeatOnly();
     _leftCleanly = true; // منع cleanup عند dispose
     ref.read(minimizedRoomProvider.notifier).state = MinimizedRoomState(
       room: widget.room,
-      mySeat: ref.read(myCurrentSeatProvider),
+      mySeat: -1, // مقعد فارغ لأننا نزلنا
       userId: me.uid,
       userName: me.displayName ?? 'مستخدم',
     );
@@ -214,7 +202,28 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // المستخدم أغلق التطبيق أو ذهب للخلفية → ينزل من المايك تلقائياً
+    if (state == AppLifecycleState.paused) {
+      _leaveSeatOnly();
+    }
+  }
+
+  // ينزل من المايك فقط دون مغادرة الغرفة
+  void _leaveSeatOnly() {
+    final mySeat = ref.read(myCurrentSeatProvider);
+    if (mySeat < 0) return;
+    final me = _currentUser;
+    if (me == null) return;
+    RoomStateRepository().leaveSeatIfOwner(_roomId, mySeat, me.uid);
+    ref.read(myCurrentSeatProvider.notifier).state = -1;
+    ZegoService().setMicMuted(true);
+    ref.read(isMicMutedProvider.notifier).state = true;
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollCtrl.dispose();
     // Read seat index BEFORE super.dispose() invalidates ref.
     final savedSeat = ref.read(myCurrentSeatProvider);
@@ -266,8 +275,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       _showMyProfile(seat);
       return;
     }
-
-    if (seat.index == 0) return;
 
     if (!seat.isEmpty) {
       if (isHost) {
@@ -387,7 +394,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     _showUserProfile(seat);
   }
 
-  void _sendMessage(String text) {
+  void _sendMessage(String text, String? textColor) {
     final me = _currentUser;
     if (me == null || text.isEmpty) return;
     final profile = ref.read(userProfileStreamProvider).valueOrNull;
@@ -397,7 +404,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       senderAvatar: me.photoURL,
       content: text,
       nameColor: profile?['nameColor'] as String?,
-      textColor: profile?['textColor'] as String?,
+      textColor: textColor ?? profile?['textColor'] as String?,
     );
   }
 
@@ -449,11 +456,16 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     final messagesAsync = ref.watch(roomChatStreamProvider(_roomId));
     final messages = messagesAsync.valueOrNull ?? [];
     final isHost = ref.watch(isHostProvider);
+    final isAdmin = ref.watch(isAdminProvider).valueOrNull == true;
     final challengeActive = ref.watch(challengeEndTimeProvider(_roomId)).valueOrNull != null;
+    final pk = ref.watch(pkStateProvider(_roomId)).valueOrNull;
+    final pkActive = pk != null && pk.active;
+    final maxSeats = ref.watch(roomMaxSeatsProvider(_roomId)).valueOrNull ?? seats.length;
 
     // ── مزامنة حالة المقعد من Firestore إلى Zego ──────────────────
     // Handles: host muting a user, and detecting when kicked from seat.
     ref.listen<List<SeatModel>>(seatsProvider(_roomId), (_, seats) {
+      if (!mounted) return;
       final mySeat = ref.read(myCurrentSeatProvider);
       if (mySeat < 0 || mySeat >= seats.length) return;
       final mySeatData = seats[mySeat];
@@ -480,6 +492,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
     // مرر للأسفل عند وصول رسائل جديدة + كشف هدايا جديدة للأنيميشن
     ref.listen(roomChatStreamProvider(_roomId), (_, next) {
+      if (!mounted) return;
       if (!next.hasValue) return;
       final msgs = next.value!;
 
@@ -521,6 +534,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
 
     // كشف ردود الفعل بالإيموجي وإظهارها فوق مقعد المرسل
     ref.listen(roomChatStreamProvider(_roomId), (_, next) {
+      if (!mounted) return;
       if (!next.hasValue) return;
       final emojiMsgs = next.value!.where((m) => m.type == MessageType.emoji).toList();
       if (emojiMsgs.isEmpty) return;
@@ -534,6 +548,17 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       setState(() => _seatEmoji[seatIdx] = EmojiTrigger(latest.content));
     });
 
+    // مزامنة عدد الزوار الحقيقي مع حقل onlineCount لبطاقات الغرف
+    ref.listen(memberCountProvider(_roomId), (_, next) {
+      if (!mounted || !next.hasValue) return;
+      try {
+        FirebaseFirestore.instance
+            .collection('rooms')
+            .doc(_roomId)
+            .update({'onlineCount': next.value!});
+      } catch (_) {}
+    });
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -542,6 +567,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
       child: AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
+        resizeToAvoidBottomInset: false,
         body: Stack(
           children: [
             _RoomBackground(coverImage: _coverImageUrl),
@@ -552,6 +578,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                   room: widget.room,
                   onMinimize: _minimizeRoom,
                   onLeave: () => _leaveRoom(),
+                  onVisitorTap: _showUserProfileFromChat,
                   isHost: isHost,
                   onSettings: () => _showSettings(context),
                 ),
@@ -559,34 +586,27 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                 // شريط هدايا التحدي (يظهر فقط عند وجود تحدي نشط)
                 _ChallengeGiftBar(roomId: _roomId),
 
-                // المضيف
-                Padding(
-                  padding: const EdgeInsets.only(top: 12, bottom: 4),
-                  child: SeatWidget(
-                    seat: seats[0],
-                    isHost: true,
-                    isMe: seats[0].userId == _currentUser?.uid,
-                    onTap: () => _onSeatTap(seats[0]),
-                    emojiTrigger: _seatEmoji[0],
-                    challengeActive: challengeActive,
-                  ),
-                ),
+                // شريط PK Battle
+                PKBar(roomId: _roomId, isHost: isHost),
 
                 // شبكة المقاعد
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
-                      mainAxisSpacing: 10,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: _seatColumns(seats.length),
+                      mainAxisSpacing: 8,
                       crossAxisSpacing: 4,
                       childAspectRatio: 0.62,
                     ),
-                    itemCount: 8,
+                    itemCount: seats.length,
                     itemBuilder: (_, i) {
-                      final seat = seats[i + 1];
+                      final seat = seats[i];
+                      final pkTeam = pkActive
+                          ? (seat.index < maxSeats ~/ 2 ? 1 : 2)
+                          : 0;
                       return SeatWidget(
                         seat: seat,
                         isHost: false,
@@ -594,6 +614,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                         onTap: () => _onSeatTap(seat),
                         emojiTrigger: _seatEmoji[seat.index],
                         challengeActive: challengeActive,
+                        pkTeam: pkTeam,
                       );
                     },
                   ),
@@ -611,17 +632,22 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
                     onUserTap: _showUserProfileFromChat,
                   ),
                 ),
-
-                RoomBottomBar(
-                  onSendMessage: _sendMessage,
-                  onGift: () => _showGiftPanel(context),
-                  onSettings: () => _showSettings(context),
-                  onSoundEffects: _showSoundEffects,
-                  isHost: isHost,
-                  roomId: _roomId,
-                  currentUserId: _currentUser?.uid ?? '',
-                ),
               ],
+            ),
+
+            // شريط الإدخال — Positioned فوق الكيبورد دائماً
+            Positioned(
+              left: 0, right: 0, bottom: 0,
+              child: RoomBottomBar(
+                onSendMessage: (text, color) => _sendMessage(text, color),
+                onGift: () => _showGiftPanel(context),
+                onSettings: () => _showSettings(context),
+                onSoundEffects: _showSoundEffects,
+                isHost: isHost,
+                isAdmin: isAdmin,
+                roomId: _roomId,
+                currentUserId: _currentUser?.uid ?? '',
+              ),
             ),
 
             // أنيميشن الهدايا
@@ -630,6 +656,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
         ),
       ),
     ));
+  }
+
+  int _seatColumns(int count) {
+    if (count <= 3) return 3;
+    if (count <= 5) return 5;
+    if (count <= 10) return 5;
+    return 5;
   }
 
   void _showGiftPanel(BuildContext ctx) {
@@ -664,6 +697,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen> {
     showModalBottomSheet(
       context: ctx,
       backgroundColor: AppColors.surface,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -821,12 +855,14 @@ class _RoomHeader extends ConsumerWidget {
     required this.room,
     required this.onMinimize,
     required this.onLeave,
+    required this.onVisitorTap,
     this.isHost = false,
     this.onSettings,
   });
   final RoomModel room;
   final VoidCallback onMinimize;
   final VoidCallback onLeave;
+  final void Function(String userId, String userName, String? avatar) onVisitorTap;
   final bool isHost;
   final VoidCallback? onSettings;
 
@@ -835,6 +871,7 @@ class _RoomHeader extends ConsumerWidget {
     final totalGifts = ref.watch(roomTotalGiftsProvider(room.roomId)).valueOrNull ?? 0;
     final lvlIdx = giftSendLevelIndex(totalGifts);
     final lvl = kRoomLevels[lvlIdx];
+    final memberCount = ref.watch(memberCountProvider(room.roomId)).valueOrNull ?? room.onlineCount;
 
     return SafeArea(
       bottom: false,
@@ -842,19 +879,6 @@ class _RoomHeader extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: [
-            // سهم الرجوع (تصغير)
-            GestureDetector(
-              onTap: onMinimize,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.black.withAlpha(80),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white, size: 16),
-              ),
-            ),
-            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -873,7 +897,6 @@ class _RoomHeader extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 6),
-                      // شارة مستوى الغرفة
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                         decoration: BoxDecoration(
@@ -888,31 +911,41 @@ class _RoomHeader extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  Row(
-                    children: [
-                      const Icon(Icons.people_rounded, size: 11, color: AppColors.primary),
-                      const SizedBox(width: 3),
-                      Text(
-                        '${room.onlineCount} متصل',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontFamily: 'Cairo'),
+                  GestureDetector(
+                    onTap: () => showModalBottomSheet(
+                      context: context,
+                      backgroundColor: Colors.transparent,
+                      isScrollControlled: true,
+                      builder: (_) => _VisitorsSheet(
+                        roomId: room.roomId,
+                        onVisitorTap: onVisitorTap,
                       ),
-                    ],
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withAlpha(100),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.primary.withAlpha(80), width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.remove_red_eye_rounded, size: 11, color: AppColors.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$memberCount',
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            if (isHost && onSettings != null) ...[
-              _HeaderBtn(icon: Icons.settings_rounded, onTap: onSettings!),
-              const SizedBox(width: 6),
-            ] else ...[
-              _HeaderBtn(icon: Icons.share_rounded, onTap: () {}),
-              const SizedBox(width: 6),
-            ],
-            // زر التصغير — مربع + أكبر 70%
-            _MinimizeBtn(onTap: onMinimize),
-            const SizedBox(width: 6),
-            // زر الخروج الكلي X — أكبر 80%
-            _LeaveBtn(onTap: onLeave),
+            // قائمة الثلاث نقاط — يسار أعلى (آخر عنصر = يسار في RTL)
+            _RoomMenuBtn(onMinimize: onMinimize, onLeave: onLeave),
           ],
         ),
       ),
@@ -920,64 +953,169 @@ class _RoomHeader extends ConsumerWidget {
   }
 }
 
-// زر تصغير الغرفة — شكل مربع، أكبر بـ 70%
-class _MinimizeBtn extends StatelessWidget {
-  const _MinimizeBtn({required this.onTap});
-  final VoidCallback onTap;
+// ── زر الثلاث نقاط — قائمة تصغير/خروج ────────────────────────────
+class _RoomMenuBtn extends StatelessWidget {
+  const _RoomMenuBtn({required this.onMinimize, required this.onLeave});
+  final VoidCallback onMinimize;
+  final VoidCallback onLeave;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),           // 7 × 1.7 ≈ 12
-        decoration: BoxDecoration(
-          color: Colors.black.withAlpha(100),
-          borderRadius: BorderRadius.circular(10),   // مربع مع زوايا
+    return PopupMenuButton<String>(
+      onSelected: (v) {
+        if (v == 'minimize') onMinimize();
+        if (v == 'leave')    onLeave();
+      },
+      color: const Color(0xFF1E1030),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      offset: const Offset(0, 44),
+      itemBuilder: (_) => [
+        const PopupMenuItem(
+          value: 'minimize',
+          child: Row(children: [
+            Icon(Icons.picture_in_picture_alt_rounded, color: Colors.white70, size: 20),
+            SizedBox(width: 10),
+            Text('تغيير الغرفة', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 14)),
+          ]),
         ),
-        child: const Icon(Icons.remove_rounded, color: Colors.white, size: 27), // 16 × 1.7 ≈ 27
-      ),
-    );
-  }
-}
-
-// زر الخروج الكلي — دائري أحمر، أكبر بـ 80%
-class _LeaveBtn extends StatelessWidget {
-  const _LeaveBtn({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(13),           // 7 × 1.8 ≈ 13
-        decoration: BoxDecoration(
-          color: Colors.red.withAlpha(210),
-          shape: BoxShape.circle,
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'leave',
+          child: Row(children: [
+            Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
+            SizedBox(width: 10),
+            Text('خروج', style: TextStyle(color: Colors.redAccent, fontFamily: 'Cairo', fontSize: 14)),
+          ]),
         ),
-        child: const Icon(Icons.close_rounded, color: Colors.white, size: 29), // 16 × 1.8 ≈ 29
-      ),
-    );
-  }
-}
-
-class _HeaderBtn extends StatelessWidget {
-  const _HeaderBtn({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+      ],
       child: Container(
-        padding: const EdgeInsets.all(7),
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: Colors.black.withAlpha(80),
           shape: BoxShape.circle,
         ),
-        child: Icon(icon, color: Colors.white, size: 16),
+        child: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 20),
+      ),
+    );
+  }
+}
+
+
+
+// ── قائمة الزوار ─────────────────────────────────────────────────────
+class _VisitorsSheet extends ConsumerWidget {
+  const _VisitorsSheet({required this.roomId, required this.onVisitorTap});
+  final String roomId;
+  final void Function(String userId, String userName, String? avatar) onVisitorTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final members = ref.watch(roomMembersProvider(roomId));
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.5,
+      minChildSize: 0.3,
+      maxChildSize: 0.85,
+      expand: false,
+      builder: (_, scrollCtrl) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1030),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // مقبض السحب
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 4),
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // العنوان
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.remove_red_eye_rounded, color: AppColors.primary, size: 18),
+                  const SizedBox(width: 8),
+                  members.when(
+                    data: (list) => Text(
+                      'الزوار (${list.length})',
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'Cairo'),
+                    ),
+                    loading: () => const Text('الزوار', style: TextStyle(color: Colors.white, fontSize: 15, fontFamily: 'Cairo')),
+                    error: (_, __) => const Text('الزوار', style: TextStyle(color: Colors.white, fontSize: 15, fontFamily: 'Cairo')),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white12, height: 1),
+            // القائمة
+            Expanded(
+              child: members.when(
+                loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
+                error: (e, _) => Center(child: Text('خطأ: $e', style: const TextStyle(color: Colors.white54, fontFamily: 'Cairo'))),
+                data: (list) {
+                  if (list.isEmpty) {
+                    return const Center(
+                      child: Text('لا يوجد زوار حالياً', style: TextStyle(color: Colors.white38, fontFamily: 'Cairo', fontSize: 14)),
+                    );
+                  }
+                  return ListView.builder(
+                    controller: scrollCtrl,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: list.length,
+                    itemBuilder: (_, i) {
+                      final m = list[i];
+                      final uid    = m['userId']    as String? ?? '';
+                      final name   = m['userName']  as String? ?? 'مستخدم';
+                      final avatar = m['userAvatar'] as String?;
+                      return InkWell(
+                        onTap: () {
+                          Navigator.pop(context);
+                          onVisitorTap(uid, name, avatar);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          child: Row(
+                            children: [
+                              // صورة المستخدم
+                              CircleAvatar(
+                                radius: 22,
+                                backgroundColor: AppColors.primary.withAlpha(60),
+                                backgroundImage: avatar != null && avatar.isNotEmpty
+                                    ? CachedNetworkImageProvider(avatar)
+                                    : null,
+                                child: avatar == null || avatar.isEmpty
+                                    ? Text(name.isNotEmpty ? name[0] : '?',
+                                        style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Cairo'))
+                                    : null,
+                              ),
+                              const SizedBox(width: 12),
+                              // الاسم
+                              Expanded(
+                                child: Text(
+                                  name,
+                                  style: const TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'Cairo', fontWeight: FontWeight.w500),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(Icons.chevron_left_rounded, color: Colors.white30, size: 20),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            const SafeArea(top: false, child: SizedBox(height: 8)),
+          ],
+        ),
       ),
     );
   }
@@ -1023,10 +1161,19 @@ class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
   Widget build(BuildContext context) {
     final challengeEnd = ref.watch(challengeEndTimeProvider(widget.roomId)).valueOrNull;
     final hasChallenge = challengeEnd != null && challengeEnd.isAfter(DateTime.now());
+    final currentMax = ref.watch(roomMaxSeatsProvider(widget.roomId)).valueOrNull ?? 9;
+    final pk = ref.watch(pkStateProvider(widget.roomId)).valueOrNull;
+    final pkActive = pk != null && pk.active;
 
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      builder: (_, scrollCtrl) => SingleChildScrollView(
+        controller: scrollCtrl,
+        padding: EdgeInsets.fromLTRB(20, 12, 20, 32 + MediaQuery.of(context).padding.bottom),
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1054,6 +1201,22 @@ class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
             icon: Icons.announcement_rounded, label: 'تعديل الإعلان', color: AppColors.primary,
             onTap: () { Navigator.pop(context); widget.onEditAnnouncement?.call(); },
           ),
+          // ── عدد المقاعد ──────────────────────────────────────────
+          ListTile(
+            leading: const Icon(Icons.mic_rounded, color: Color(0xFF9B59B6)),
+            title: const Text('عدد المقاعد', style: TextStyle(color: Color(0xFF9B59B6), fontFamily: 'Cairo')),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF9B59B6).withAlpha(30),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF9B59B6).withAlpha(100)),
+              ),
+              child: Text('$currentMax مقعد',
+                  style: const TextStyle(color: Color(0xFF9B59B6), fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+            onTap: () => _showSeatCountDialog(context, currentMax),
+          ),
           _MenuTile(
             icon: hasChallenge ? Icons.timer_off_rounded : Icons.timer_rounded,
             label: hasChallenge ? 'إلغاء التحدي 🏁' : 'تفعيل تحدي ⏱',
@@ -1064,6 +1227,17 @@ class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
                     await RoomStateRepository().deactivateChallenge(widget.roomId);
                   }
                 : () => _showChallengeDialog(context),
+          ),
+          _MenuTile(
+            icon: Icons.sports_kabaddi_rounded,
+            label: pkActive ? 'إيقاف تحدي PK ⚔️' : 'تحدي PK ⚔️',
+            color: pkActive ? AppColors.error : const Color(0xFFFF6B35),
+            onTap: pkActive
+                ? () async {
+                    Navigator.pop(context);
+                    await RoomStateRepository().stopPK(widget.roomId);
+                  }
+                : () => _showPKDialog(context),
           ),
           _MenuTile(
             icon: Icons.mic_off_rounded, label: 'كتم الكل', color: AppColors.warning,
@@ -1082,6 +1256,71 @@ class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
           ),
           const SizedBox(height: 8),
         ],
+      ),
+    ),
+  );
+  }
+
+  void _showSeatCountDialog(BuildContext context, int current) {
+    int selected = current;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text('عدد المقاعد',
+              style: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 16)),
+          content: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            alignment: WrapAlignment.center,
+            children: [3, 5, 10, 20, 25].map((n) {
+              final isSel = selected == n;
+              return GestureDetector(
+                onTap: () => setDlg(() => selected = n),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  width: 64,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isSel ? const Color(0xFF9B59B6).withAlpha(40) : AppColors.surfaceLight,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSel ? const Color(0xFF9B59B6) : AppColors.divider,
+                      width: isSel ? 2 : 1,
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$n',
+                    style: TextStyle(
+                      color: isSel ? const Color(0xFF9B59B6) : AppColors.textSecondary,
+                      fontFamily: 'Cairo',
+                      fontWeight: isSel ? FontWeight.w700 : FontWeight.normal,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء', style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo')),
+            ),
+            TextButton(
+              onPressed: () async {
+                await RoomStateRepository().updateMaxSeats(widget.roomId, selected);
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('حفظ',
+                  style: TextStyle(color: Color(0xFF9B59B6), fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1164,6 +1403,43 @@ class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
       ),
     );
   }
+
+  void _showPKDialog(BuildContext sheetCtx) {
+    showDialog(
+      context: sheetCtx,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('⚔️ تحدي PK',
+            style: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'المقاعد الأولى = 🔥 فريق أ\nالمقاعد الأخيرة = 💙 فريق ب\n\nاختر مدة التحدي:',
+              style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _PKDurBtn(label: '3 دقائق', minutes: 3, roomId: widget.roomId, dialogCtx: ctx, sheetCtx: sheetCtx),
+                _PKDurBtn(label: '5 دقائق', minutes: 5, roomId: widget.roomId, dialogCtx: ctx, sheetCtx: sheetCtx),
+                _PKDurBtn(label: '10 دقائق', minutes: 10, roomId: widget.roomId, dialogCtx: ctx, sheetCtx: sheetCtx),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء', style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo')),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── زر مدة التحدي ──────────────────────────────────────────────────
@@ -1217,25 +1493,114 @@ class _DurBtn extends StatelessWidget {
   }
 }
 
+// ── زر مدة PK ──────────────────────────────────────────────────────
+class _PKDurBtn extends StatelessWidget {
+  const _PKDurBtn({
+    required this.label,
+    required this.minutes,
+    required this.roomId,
+    required this.dialogCtx,
+    required this.sheetCtx,
+  });
+  final String label;
+  final int minutes;
+  final String roomId;
+  final BuildContext dialogCtx;
+  final BuildContext sheetCtx;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () async {
+        final messenger = ScaffoldMessenger.maybeOf(sheetCtx);
+        Navigator.pop(dialogCtx);
+        Navigator.pop(sheetCtx);
+        try {
+          await RoomStateRepository().startPK(roomId, minutes);
+        } catch (e) {
+          debugPrint('[PK] startPK error: $e');
+          messenger?.showSnackBar(SnackBar(
+            content: Text('خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ));
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF6B35), Color(0xFFFF4500)],
+          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFF6B35).withAlpha(90),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white, fontFamily: 'Cairo',
+            fontWeight: FontWeight.w700, fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  _ChallengeGiftBar — شريط هدايا التحدي المتحرك
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _ChallengeGiftBar extends ConsumerStatefulWidget {
+// _ChallengeGiftBar: يراقب Providers فقط — بدون Timer
+class _ChallengeGiftBar extends ConsumerWidget {
   const _ChallengeGiftBar({required this.roomId});
   final String roomId;
 
   @override
-  ConsumerState<_ChallengeGiftBar> createState() => _ChallengeGiftBarState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final endTime = ref.watch(challengeEndTimeProvider(roomId)).valueOrNull;
+    if (endTime == null) return const SizedBox.shrink();
+    final total = ref.watch(challengeGiftTotalProvider(roomId)).valueOrNull ?? 0;
+    final isHost = ref.watch(isHostProvider);
+    return _ChallengeGiftBarContent(
+      roomId: roomId,
+      endTime: endTime,
+      total: total,
+      isHost: isHost,
+    );
+  }
 }
 
-class _ChallengeGiftBarState extends ConsumerState<_ChallengeGiftBar> {
+// _ChallengeGiftBarContent: يحسب العداد بـ Timer — بدون ref.watch
+class _ChallengeGiftBarContent extends StatefulWidget {
+  const _ChallengeGiftBarContent({
+    required this.roomId,
+    required this.endTime,
+    required this.total,
+    required this.isHost,
+  });
+  final String roomId;
+  final DateTime endTime;
+  final int total;
+  final bool isHost;
+
+  @override
+  State<_ChallengeGiftBarContent> createState() => _ChallengeGiftBarContentState();
+}
+
+class _ChallengeGiftBarContentState extends State<_ChallengeGiftBarContent> {
   Timer? _tick;
+  bool _deactivated = false;
 
   @override
   void initState() {
     super.initState();
-    // يحدّث كل ثانية لتحديث العداد
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -1271,13 +1636,10 @@ class _ChallengeGiftBarState extends ConsumerState<_ChallengeGiftBar> {
 
   @override
   Widget build(BuildContext context) {
-    final endTime = ref.watch(challengeEndTimeProvider(widget.roomId)).valueOrNull;
-    if (endTime == null) return const SizedBox.shrink();
-
-    final remaining = endTime.difference(DateTime.now());
+    final remaining = widget.endTime.difference(DateTime.now());
     if (remaining.isNegative) {
-      final isHost = ref.read(isHostProvider);
-      if (isHost) {
+      if (widget.isHost && !_deactivated) {
+        _deactivated = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           RoomStateRepository().deactivateChallenge(widget.roomId);
         });
@@ -1285,7 +1647,7 @@ class _ChallengeGiftBarState extends ConsumerState<_ChallengeGiftBar> {
       return const SizedBox.shrink();
     }
 
-    final total = ref.watch(challengeGiftTotalProvider(widget.roomId)).valueOrNull ?? 0;
+    final total = widget.total;
     final progress = _progress(total);
     final color = _barColor(total);
 

@@ -12,15 +12,17 @@ class RoomBottomBar extends ConsumerStatefulWidget {
     required this.onGift,
     required this.onSettings,
     required this.isHost,
+    this.isAdmin = false,
     required this.roomId,
     required this.currentUserId,
     this.onSoundEffects,
   });
 
-  final void Function(String) onSendMessage;
+  final void Function(String text, String? textColor) onSendMessage;
   final VoidCallback onGift;
   final VoidCallback onSettings;
   final bool isHost;
+  final bool isAdmin;
   final String roomId;
   final String currentUserId;
   final VoidCallback? onSoundEffects;
@@ -29,9 +31,21 @@ class RoomBottomBar extends ConsumerStatefulWidget {
   ConsumerState<RoomBottomBar> createState() => _RoomBottomBarState();
 }
 
+// ألوان اختيار نص التعليق
+const _kTextColors = [
+  ('ذهبي',  Color(0xFFFFD700)),
+  ('أبيض',  Color(0xFFFFFFFF)),
+  ('سماوي', Color(0xFF4CF0FF)),
+  ('وردي',  Color(0xFFFF4D6D)),
+  ('أخضر',  Color(0xFF2ECC71)),
+  ('برتقالي', Color(0xFFFF9500)),
+  ('بنفسجي', Color(0xFFBF5FFF)),
+];
+
 class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
   final _textCtrl = TextEditingController();
   bool _showInput = false;
+  Color _selectedTextColor = const Color(0xFFFFD700);
 
   @override
   void dispose() {
@@ -39,10 +53,17 @@ class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
     super.dispose();
   }
 
+  String _colorHex(Color c) {
+    final r = (c.r * 255).round().toRadixString(16).padLeft(2, '0');
+    final g = (c.g * 255).round().toRadixString(16).padLeft(2, '0');
+    final b = (c.b * 255).round().toRadixString(16).padLeft(2, '0');
+    return '#$r$g$b'.toUpperCase();
+  }
+
   void _send() {
     final text = _textCtrl.text.trim();
     if (text.isEmpty) return;
-    widget.onSendMessage(text);
+    widget.onSendMessage(text, _colorHex(_selectedTextColor));
     _textCtrl.clear();
     setState(() => _showInput = false);
   }
@@ -53,15 +74,19 @@ class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
     final chatMuteKey = '${widget.roomId}::${widget.currentUserId}';
     final isChatMuted = ref.watch(chatMutedProvider(chatMuteKey)).valueOrNull == true;
 
-    return Container(
-      color: Colors.black.withAlpha(160),
-      padding: EdgeInsets.fromLTRB(12, 8, 12, MediaQuery.of(context).viewInsets.bottom + 12),
-      child: _showInput ? _inputRow(isChatMuted) : _actionRow(isMuted, isChatMuted),
+    return SafeArea(
+      top: false,
+      child: Container(
+        color: Colors.black.withAlpha(160),
+        padding: EdgeInsets.fromLTRB(12, 8, 12, MediaQuery.of(context).viewInsets.bottom + 8),
+        child: _showInput ? _inputRow(isChatMuted) : _actionRow(isMuted, isChatMuted),
+      ),
     );
   }
 
   Widget _actionRow(bool isMuted, bool isChatMuted) {
-    final isOnSeat = ref.watch(myCurrentSeatProvider) >= 0;
+    final isOnSeat       = ref.watch(myCurrentSeatProvider) >= 0;
+    final isAudioMuted   = ref.watch(isRoomAudioMutedProvider);
     return Row(
       children: [
         // ميكروفون — يعمل فقط عند الجلوس على مقعد
@@ -87,6 +112,20 @@ class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
             },
             filled: true,
           ),
+        ),
+        const SizedBox(width: 6),
+        // سماعة الغرفة — كتم الصوت الوارد
+        _ActionBtn(
+          icon: isAudioMuted
+              ? Icons.volume_off_rounded
+              : Icons.headphones_rounded,
+          color: isAudioMuted ? AppColors.error : AppColors.textSecondary,
+          onTap: () async {
+            final newMuted = !isAudioMuted;
+            ref.read(isRoomAudioMutedProvider.notifier).state = newMuted;
+            await ZegoService().muteAllAudio(newMuted);
+          },
+          filled: isAudioMuted,
         ),
         const SizedBox(width: 8),
         // الدردشة
@@ -121,7 +160,7 @@ class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
         ),
         const SizedBox(width: 8),
         // هدايا
-        _ActionBtn(icon: Icons.card_giftcard_rounded, color: AppColors.accent, onTap: widget.onGift),
+        _ActionBtn(icon: Icons.redeem_rounded, color: const Color(0xFFFFD700), onTap: widget.onGift),
         const SizedBox(width: 8),
         // مؤثرات الإيموجي
         if (widget.onSoundEffects != null) ...[
@@ -140,7 +179,7 @@ class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
             builder: (_) => const VoiceEffectsSheet(),
           ),
         ),
-        if (widget.isHost) ...[
+        if (widget.isHost || widget.isAdmin) ...[
           const SizedBox(width: 8),
           _ActionBtn(icon: Icons.settings_rounded, color: AppColors.textSecondary, onTap: widget.onSettings),
         ],
@@ -150,47 +189,108 @@ class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
 
   Widget _inputRow(bool isChatMuted) {
     if (isChatMuted) {
-      // Double safety: close input if user got muted while typing
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _showInput = false);
       });
     }
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          onPressed: () => setState(() => _showInput = false),
-          icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
+        // شريط اختيار لون النص
+        SizedBox(
+          height: 32,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: _kTextColors.map((entry) {
+              final (label, color) = entry;
+              final isSel = _selectedTextColor == color;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedTextColor = color),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  margin: const EdgeInsets.only(left: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withAlpha(isSel ? 60 : 25),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isSel ? color : color.withAlpha(60),
+                      width: isSel ? 2 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 10, height: 10,
+                        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(label, style: TextStyle(
+                        color: color,
+                        fontSize: 10,
+                        fontFamily: 'Cairo',
+                        fontWeight: isSel ? FontWeight.w700 : FontWeight.normal,
+                      )),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            controller: _textCtrl,
-            autofocus: true,
-            style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'اكتب رسالتك...',
-              hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
-              filled: true,
-              fillColor: Colors.white.withAlpha(20),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(20),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        const SizedBox(height: 6),
+        // صف الإدخال
+        Row(
+          children: [
+            IconButton(
+              onPressed: () => setState(() => _showInput = false),
+              icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
-            onSubmitted: (_) => _send(),
-          ),
-        ),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: _send,
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: const BoxDecoration(shape: BoxShape.circle, gradient: AppColors.primaryGradient),
-            child: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _textCtrl,
+                autofocus: true,
+                style: TextStyle(
+                  color: _selectedTextColor,
+                  fontFamily: 'Cairo',
+                  fontSize: 14,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'اكتب رسالتك...',
+                  hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
+                  filled: true,
+                  fillColor: const Color(0xFF00C853).withAlpha(25),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    borderSide: BorderSide(color: const Color(0xFF00C853).withAlpha(60), width: 1),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    borderSide: BorderSide(color: const Color(0xFF00C853).withAlpha(60), width: 1),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    borderSide: BorderSide(color: const Color(0xFF00C853).withAlpha(130), width: 1.5),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                onSubmitted: (_) => _send(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _send,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: const BoxDecoration(shape: BoxShape.circle, gradient: AppColors.primaryGradient),
+                child: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+              ),
+            ),
+          ],
         ),
       ],
     );

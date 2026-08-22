@@ -99,6 +99,7 @@ class _UserProfileSheetState extends ConsumerState<UserProfileSheet> {
                         children: [
                           Text(widget.targetUserName,
                               style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700, fontFamily: 'Cairo')),
+                          _SupportLevelBar(userId: widget.targetUserId),
                           const SizedBox(height: 4),
                           Row(
                             children: [
@@ -121,26 +122,6 @@ class _UserProfileSheetState extends ConsumerState<UserProfileSheet> {
                 Row(
                   children: [
                     _ActionBtn(icon: Icons.person_add_rounded, label: 'متابعة', color: AppColors.primary, onTap: () => Navigator.pop(context)),
-                    const SizedBox(width: 10),
-                    _ActionBtn(
-                      icon: Icons.card_giftcard_rounded,
-                      label: 'هدية',
-                      color: AppColors.accent,
-                      onTap: () {
-                        Navigator.pop(context);
-                        showModalBottomSheet(
-                          context: context,
-                          backgroundColor: Colors.transparent,
-                          isScrollControlled: true,
-                          builder: (_) => GiftPanel(
-                            targetUserId: widget.targetUserId,
-                            targetUserName: widget.targetUserName,
-                            targetUserAvatar: widget.targetUserAvatar,
-                            roomId: widget.roomId,
-                          ),
-                        );
-                      },
-                    ),
                     const SizedBox(width: 10),
                     _ActionBtn(icon: Icons.chat_bubble_outline_rounded, label: 'رسالة', color: AppColors.textSecondary, onTap: () => Navigator.pop(context)),
                   ],
@@ -370,6 +351,130 @@ class _UserProfileSheetState extends ConsumerState<UserProfileSheet> {
   }
 }
 
+// ── نظام مستوى الدعم ─────────────────────────────────────────────────
+
+/// بيرجع (level, current_diamonds_in_level, diamonds_needed_for_level)
+({int level, int current, int needed}) _supportLevelInfo(int diamonds) {
+  // (startLevel, endLevel, diamondsPerLevel)
+  const ranges = [
+    (1,   10,  20000),
+    (10,  15,  50000),
+    (15,  30,  120000),
+    (30,  50,  300000),
+    (50,  70,  500000),
+    (70,  90,  1500000),
+    (90,  120, 3000000),
+    (120, 150, 6000000),
+    (150, 200, 12000000),
+    (200, 300, 25000000),
+    (300, 400, 50000000),
+    (400, 500, 100000000),
+  ];
+  int cumulative = 0;
+  for (final (startLvl, endLvl, perLvl) in ranges) {
+    final count = endLvl - startLvl;
+    final rangeTotal = count * perLvl;
+    if (diamonds < cumulative + rangeTotal) {
+      final inRange = diamonds - cumulative;
+      final offset  = inRange ~/ perLvl;
+      return (level: startLvl + offset, current: inRange - offset * perLvl, needed: perLvl);
+    }
+    cumulative += rangeTotal;
+  }
+  return (level: 500, current: 0, needed: 0);
+}
+
+Color _levelColor(int level) {
+  if (level <  10) return const Color(0xFF9E9E9E);
+  if (level <  30) return const Color(0xFF42A5F5);
+  if (level <  50) return const Color(0xFF66BB6A);
+  if (level <  70) return const Color(0xFFAB47BC);
+  if (level <  90) return const Color(0xFFFFD700);
+  if (level < 150) return const Color(0xFFFF9800);
+  if (level < 300) return const Color(0xFFE91E63);
+  return const Color(0xFFFF5252);
+}
+
+String _levelRank(int level) {
+  if (level <  10) return 'مبتدئ';
+  if (level <  30) return 'ناشئ';
+  if (level <  50) return 'متوسط';
+  if (level <  70) return 'متقدم';
+  if (level <  90) return 'نجم';
+  if (level < 150) return 'أسطورة';
+  if (level < 300) return 'عملاق';
+  return 'خارق';
+}
+
+String _fmtNum(int n) {
+  if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+  if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}K';
+  return '$n';
+}
+
+class _SupportLevelBar extends ConsumerWidget {
+  const _SupportLevelBar({required this.userId});
+  final String userId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final diamonds = ref.watch(userGiftDiamondsProvider(userId)).valueOrNull ?? 0;
+    final info     = _supportLevelInfo(diamonds);
+    final color    = _levelColor(info.level);
+    final rank     = _levelRank(info.level);
+    final progress = info.needed > 0 ? (info.current / info.needed).clamp(0.0, 1.0) : 1.0;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // سطر: [Lv. X]  اسم الرتبة
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(40),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: color.withAlpha(160), width: 1),
+                ),
+                child: Text(
+                  'Lv. ${info.level}',
+                  style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800, fontFamily: 'Cairo'),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                rank,
+                style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Cairo'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          // شريط التقدم
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 5,
+              backgroundColor: Colors.white.withAlpha(30),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            info.needed > 0
+                ? '${_fmtNum(info.current)} / ${_fmtNum(info.needed)} 💎'
+                : 'MAX 💎',
+            style: TextStyle(color: color.withAlpha(200), fontSize: 9, fontFamily: 'Cairo'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ── ويدجيت زر التحكم ──────────────────────────────────────────────
 class _ControlBtn extends StatelessWidget {
   const _ControlBtn({required this.icon, required this.label, required this.color, required this.onTap});
@@ -475,6 +580,10 @@ class _MyProfileSheetState extends ConsumerState<MyProfileSheet> {
           Text(
             widget.userName,
             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, fontFamily: 'Cairo'),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _SupportLevelBar(userId: widget.userId),
           ),
 
           const SizedBox(height: 20),

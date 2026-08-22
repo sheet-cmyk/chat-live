@@ -45,59 +45,16 @@ class GiftPanel extends ConsumerStatefulWidget {
 class _GiftPanelState extends ConsumerState<GiftPanel>
     with TickerProviderStateMixin {
   int _quantity = 1;
-  bool _isBoxOpen = false;
 
   // المستلم المختار (null = الكل)
   String? _selectedUserId;
   String? _selectedUserName;
-
-  late AnimationController _floatCtrl;
-  late AnimationController _openCtrl;
-  late Animation<double> _floatY;
-  late Animation<double> _openScale;
-  late Animation<double> _openOpacity;
 
   @override
   void initState() {
     super.initState();
     _selectedUserId   = widget.targetUserId;
     _selectedUserName = widget.targetUserName;
-
-    _floatCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat(reverse: true);
-    _floatY = Tween<double>(begin: 0, end: -12).animate(
-      CurvedAnimation(parent: _floatCtrl, curve: Curves.easeInOut),
-    );
-
-    _openCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
-    );
-    _openScale = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.3), weight: 20),
-      TweenSequenceItem(tween: Tween(begin: 1.3, end: 0.9), weight: 15),
-      TweenSequenceItem(tween: Tween(begin: 0.9, end: 1.6), weight: 20),
-      TweenSequenceItem(tween: Tween(begin: 1.6, end: 0.0), weight: 45),
-    ]).animate(_openCtrl);
-    _openOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _openCtrl, curve: const Interval(0.55, 1.0)),
-    );
-  }
-
-  @override
-  void dispose() {
-    _floatCtrl.dispose();
-    _openCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _openBox() async {
-    HapticFeedback.heavyImpact();
-    _floatCtrl.stop();
-    await _openCtrl.forward();
-    if (mounted) setState(() => _isBoxOpen = true);
   }
 
   @override
@@ -145,7 +102,7 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
             child: Row(
               children: [
                 const Text(
-                  'الهدايا',
+                  '🎁 الهدايا',
                   style: TextStyle(
                     color: Colors.white, fontSize: 16,
                     fontWeight: FontWeight.w700, fontFamily: 'Cairo',
@@ -173,74 +130,62 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
               }),
             ),
 
-          // ── كأس المتصدرين (بعد فتح الصندوق فقط) ───────────────────
-          if (_isBoxOpen && widget.roomId != null)
+          // ── كأس المتصدرين ───────────────────────────────────────
+          if (widget.roomId != null)
             _TopGifters(roomId: widget.roomId!),
 
-          // ── صندوق مغلق ↔ شبكة هدايا ────────────────────────────
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 350),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            child: _isBoxOpen
-                ? _GiftGrid(
-                    key: const ValueKey('grid'),
-                    gifts: gifts,
-                    selected: selected,
-                    category: category,
-                    onCategoryChanged: () {
-                      ref.read(selectedGiftProvider.notifier).state = null;
-                      setState(() => _quantity = 1);
-                    },
-                    onGiftSelected: (g) {
-                      ref.read(selectedGiftProvider.notifier).state = g;
-                      setState(() => _quantity = 1);
-                      HapticFeedback.selectionClick();
-                    },
-                  )
-                : _GiftBoxView(
-                    key: const ValueKey('box'),
-                    floatY: _floatY,
-                    openScale: _openScale,
-                    openOpacity: _openOpacity,
-                    isOpening: _openCtrl.isAnimating,
-                    onTap: _openCtrl.isAnimating ? null : _openBox,
-                    listenables: Listenable.merge([_floatCtrl, _openCtrl]),
-                  ),
+          // ── شبكة الهدايا مباشرة ──────────────────────────────────
+          _GiftGrid(
+            gifts: gifts,
+            selected: selected,
+            category: category,
+            onCategoryChanged: () {
+              ref.read(selectedGiftProvider.notifier).state = null;
+              setState(() => _quantity = 1);
+            },
+            onGiftSelected: (g) {
+              ref.read(selectedGiftProvider.notifier).state = g;
+              setState(() => _quantity = 1);
+              HapticFeedback.selectionClick();
+            },
           ),
 
-          // ── شريط الكمية + زر الإرسال (بعد فتح الصندوق) ──────────
-          if (_isBoxOpen)
-            AnimatedSize(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOut,
-              child: selected != null
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _QuantityStrip(
-                          quantity: _quantity,
-                          onPick: (q) => setState(() => _quantity = q),
-                          onCustom: _openCustomQty,
+          // ── شريط الكمية + زر الإرسال ────────────────────────────
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            child: selected != null
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _QuantityStrip(
+                        quantity: _quantity,
+                        onPick: (q) => setState(() => _quantity = q),
+                        onCustom: _openCustomQty,
+                      ),
+                      Padding(
+                        padding: EdgeInsets.only(
+                          left: 16, right: 16, top: 8,
+                          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
                         ),
-                        Padding(
-                          padding: EdgeInsets.only(
-                            left: 16, right: 16, top: 8,
-                            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-                          ),
-                          child: SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: ElevatedButton(
-                              onPressed: (sending || !canAfford) ? null : () => _doSend(selected),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: Builder(builder: (_) {
+                            final noTarget = showSelector && _selectedUserId == null;
+                            final blocked  = sending || !canAfford || noTarget;
+                            return ElevatedButton(
+                              onPressed: blocked ? null : () => _doSend(selected),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: canAfford
-                                    ? _kCardSel
-                                    : const Color(0xFF444455),
-                                disabledBackgroundColor: const Color(0xFF333344),
+                                backgroundColor: noTarget
+                                    ? const Color(0xFF333344)
+                                    : canAfford
+                                        ? _kCardSel
+                                        : const Color(0xFF444455),
+                                disabledBackgroundColor: const Color(0xFF2A2A3A),
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14)),
-                                elevation: canAfford ? 6 : 0,
+                                elevation: blocked ? 0 : 6,
                                 shadowColor: _kCardSel.withAlpha(120),
                               ),
                               child: sending
@@ -251,23 +196,26 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
                                       ),
                                     )
                                   : Text(
-                                      canAfford
-                                          ? 'إرسال ${selected.emoji}  💎 ${_fmt(total)}'
-                                          : 'رصيدك غير كافٍ',
+                                      noTarget
+                                          ? '👆 اختر شخصاً أولاً'
+                                          : canAfford
+                                              ? 'إرسال ${selected.emoji}  💎 ${_fmt(total)}'
+                                              : 'رصيدك غير كافٍ',
                                       style: const TextStyle(
                                         color: Colors.white, fontFamily: 'Cairo',
                                         fontWeight: FontWeight.w700, fontSize: 15,
                                       ),
                                     ),
-                            ),
-                          ),
+                            );
+                          }),
                         ),
-                      ],
-                    )
-                  : SizedBox(
-                      height: MediaQuery.of(context).viewInsets.bottom + 16,
-                    ),
-            ),
+                      ),
+                    ],
+                  )
+                : SizedBox(
+                    height: MediaQuery.of(context).viewInsets.bottom + 16,
+                  ),
+          ),
         ],
       ),
     );
@@ -286,10 +234,12 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
           controller: ctrl,
           keyboardType: TextInputType.number,
           autofocus: true,
+          cursorColor: Colors.white,
           style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 18),
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           textAlign: TextAlign.center,
           decoration: const InputDecoration(
+            filled: false,
             hintText: 'مثال: 50',
             hintStyle: TextStyle(color: Colors.white30, fontFamily: 'Cairo'),
             enabledBorder: UnderlineInputBorder(
@@ -327,6 +277,23 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
     final room = ref.read(currentRoomProvider);
     if (me == null || room == null) return;
 
+    // تحديد فريق PK للمستلم إذا كانت معركة PK نشطة
+    String? pkTeam;
+    if (widget.roomId != null && _selectedUserId != null) {
+      final pk = ref.read(pkStateProvider(widget.roomId!)).valueOrNull;
+      if (pk != null && pk.active && !pk.timeUp) {
+        final allSeats = ref.read(seatsProvider(widget.roomId!));
+        final maxSeats = ref.read(roomMaxSeatsProvider(widget.roomId!)).valueOrNull ?? allSeats.length;
+        final recvSeat = allSeats.firstWhere(
+          (s) => s.userId == _selectedUserId,
+          orElse: () => const SeatModel(index: -1),
+        );
+        if (recvSeat.index >= 0) {
+          pkTeam = recvSeat.index < maxSeats ~/ 2 ? 'A' : 'B';
+        }
+      }
+    }
+
     ref.read(sendingGiftProvider.notifier).state = true;
     try {
       final ok = await ref.read(giftRepositoryProvider).sendGift(
@@ -338,6 +305,7 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
         receiverName: _selectedUserName,
         gift: gift,
         quantity: _quantity,
+        pkTeam: pkTeam,
       );
 
       if (ok && mounted) {
@@ -367,130 +335,11 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  _GiftBoxView — صندوق الهدايا المغلق مع أنيميشن
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _GiftBoxView extends StatelessWidget {
-  const _GiftBoxView({
-    super.key,
-    required this.floatY,
-    required this.openScale,
-    required this.openOpacity,
-    required this.isOpening,
-    required this.onTap,
-    required this.listenables,
-  });
-  final Animation<double> floatY;
-  final Animation<double> openScale;
-  final Animation<double> openOpacity;
-  final bool isOpening;
-  final VoidCallback? onTap;
-  final Listenable listenables;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        height: 260,
-        child: Center(
-          child: AnimatedBuilder(
-            animation: listenables,
-            builder: (_, __) => Opacity(
-              opacity: isOpening ? openOpacity.value : 1.0,
-              child: Transform.scale(
-                scale: isOpening ? openScale.value : 1.0,
-                child: Transform.translate(
-                  offset: Offset(0, isOpening ? 0 : floatY.value),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // الصندوق مع الوهج
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          // وهج داخلي
-                          Container(
-                            width: 130, height: 130,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: RadialGradient(
-                                colors: [
-                                  _kCardSel.withAlpha(80),
-                                  _kCardSel.withAlpha(20),
-                                  Colors.transparent,
-                                ],
-                                stops: const [0.0, 0.5, 1.0],
-                              ),
-                            ),
-                          ),
-                          // بريق (4 خطوط متقاطعة)
-                          ...List.generate(4, (i) => Transform.rotate(
-                            angle: i * 0.785398,  // 45 درجة
-                            child: Container(
-                              width: 90, height: 1.5,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(colors: [
-                                  Colors.transparent,
-                                  _kCardSel.withAlpha(80),
-                                  Colors.transparent,
-                                ]),
-                              ),
-                            ),
-                          )),
-                          // الصندوق
-                          const Text('🎁', style: TextStyle(fontSize: 88)),
-                          // نجوم صغيرة
-                          const Positioned(
-                            top: 4, right: 8,
-                            child: Text('✨', style: TextStyle(fontSize: 18)),
-                          ),
-                          const Positioned(
-                            bottom: 8, left: 6,
-                            child: Text('⭐', style: TextStyle(fontSize: 13)),
-                          ),
-                          const Positioned(
-                            top: 12, left: 14,
-                            child: Text('✨', style: TextStyle(fontSize: 12)),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      // زر الفتح
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 9),
-                        decoration: BoxDecoration(
-                          color: _kCardSel.withAlpha(35),
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(color: _kCardSel.withAlpha(100), width: 1.5),
-                        ),
-                        child: const Text(
-                          '✨ اضغط لفتح الهدايا ✨',
-                          style: TextStyle(
-                            color: Colors.white, fontFamily: 'Cairo',
-                            fontSize: 14, fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 //  _GiftGrid — تبويبات الفئات + شبكة الهدايا
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _GiftGrid extends StatelessWidget {
   const _GiftGrid({
-    super.key,
     required this.gifts,
     required this.selected,
     required this.category,
@@ -603,28 +452,31 @@ class _TargetSelector extends StatelessWidget {
         ),
         SizedBox(
           height: 46,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            children: [
-              // الكل
-              _UserChip(
-                id: null,
-                name: 'الكل',
-                avatar: null,
-                isSelected: selectedUserId == null,
-                onTap: () => onSelect(null, null, null),
-                isAll: true,
-              ),
-              ...users.map((u) => _UserChip(
-                id: u.id,
-                name: u.name,
-                avatar: u.avatar,
-                isSelected: selectedUserId == u.id,
-                onTap: () => onSelect(u.id, u.name, u.avatar),
-              )),
-            ],
-          ),
+          child: users.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.mic_off_rounded, color: Colors.white38, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        'لا يوجد أحد على المايك حالياً',
+                        style: TextStyle(color: Colors.white.withAlpha(100), fontFamily: 'Cairo', fontSize: 12),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: users.map((u) => _UserChip(
+                    id: u.id,
+                    name: u.name,
+                    avatar: u.avatar,
+                    isSelected: selectedUserId == u.id,
+                    onTap: () => onSelect(u.id, u.name, u.avatar),
+                  )).toList(),
+                ),
         ),
         const SizedBox(height: 8),
         Container(height: 1, color: Colors.white.withAlpha(18)),
@@ -641,14 +493,12 @@ class _UserChip extends StatelessWidget {
     required this.avatar,
     required this.isSelected,
     required this.onTap,
-    this.isAll = false,
   });
   final String? id;
   final String name;
   final String? avatar;
   final bool isSelected;
   final VoidCallback onTap;
-  final bool isAll;
 
   @override
   Widget build(BuildContext context) {
@@ -672,9 +522,7 @@ class _UserChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (isAll)
-              const Icon(Icons.group_rounded, color: Colors.white70, size: 16)
-            else if (avatar != null && avatar!.isNotEmpty)
+            if (avatar != null && avatar!.isNotEmpty)
               ClipOval(
                 child: Image.network(
                   avatar!,
@@ -842,14 +690,14 @@ class _GiftCard extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
-          color: isSelected ? _kCardSel.withAlpha(28) : _kCard,
+          color: isSelected ? _kCardSel.withAlpha(50) : const Color(0xFF1A1A30),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? _kCardSel : Colors.white12,
-            width: 1.5,
+            color: isSelected ? _kCardSel : const Color(0xFFFFD700).withAlpha(40),
+            width: isSelected ? 2 : 1,
           ),
           boxShadow: isSelected
-              ? [BoxShadow(color: _kCardSel.withAlpha(70), blurRadius: 10)]
+              ? [BoxShadow(color: _kCardSel.withAlpha(80), blurRadius: 10)]
               : null,
         ),
         child: Stack(

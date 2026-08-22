@@ -206,7 +206,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
         if (!mounted) { t.cancel(); return; }
         final rem = _state?.secsRemainingFor(30) ?? 0;
         setState(() => _countdown = rem);
-        if (rem <= 0) { t.cancel(); _repo.tryTransitionToSpinning(state.roundId); }
+        if (rem <= 0) { t.cancel(); _repo.tryTransitionToSpinning(state.roundId, forcedWinner: _state?.forcedWinner); }
       });
     }
 

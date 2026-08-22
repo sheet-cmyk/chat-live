@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/seat_model.dart';
 import '../../data/models/room_message_model.dart';
+import '../../data/models/pk_state.dart';
 import '../../data/repositories/room_state_repository.dart';
 import '../../../home/data/models/room_model.dart';
+
+export '../../data/models/pk_state.dart';
 
 // بيانات الراسل الأعلى في لوحة الهدايا
 class GiftLeader {
@@ -18,10 +21,16 @@ class GiftLeader {
 // الغرفة الحالية
 final currentRoomProvider = StateProvider<RoomModel?>((ref) => null);
 
+// ── عدد المقاعد من Firestore (يتحدث فورياً عند التغيير) ─────────
+final roomMaxSeatsProvider = StreamProvider.family<int, String>((ref, roomId) {
+  return RoomStateRepository().watchRoomMaxSeats(roomId);
+});
+
 // ── مقاعد Firestore ──────────────────────────────────────────────
 final roomSeatsStreamProvider =
     StreamProvider.family<List<SeatModel>, String>((ref, roomId) {
-  return RoomStateRepository().watchSeats(roomId);
+  final maxSeats = ref.watch(roomMaxSeatsProvider(roomId)).valueOrNull ?? 9;
+  return RoomStateRepository().watchSeats(roomId, maxSeats: maxSeats);
 });
 
 // مستوى الصوت المحلي (من ZEGOCLOUD)
@@ -29,8 +38,9 @@ final speakingUsersProvider = StateProvider<Set<String>>((ref) => {});
 
 // المقاعد مع حالة التحدث المحلية مدمجة
 final seatsProvider = Provider.family<List<SeatModel>, String>((ref, roomId) {
+  final maxSeats = ref.watch(roomMaxSeatsProvider(roomId)).valueOrNull ?? 9;
   final seats = ref.watch(roomSeatsStreamProvider(roomId)).valueOrNull ??
-      List.generate(9, (i) => SeatModel(index: i));
+      List.generate(maxSeats, (i) => SeatModel(index: i));
   final speaking = ref.watch(speakingUsersProvider);
   return seats
       .map((s) => s.copyWith(
@@ -190,9 +200,10 @@ class _ChatWriter {
 }
 
 // ── حالات محلية ──────────────────────────────────────────────────
-final isMicMutedProvider = StateProvider<bool>((ref) => false);
-final myCurrentSeatProvider = StateProvider<int>((ref) => -1);
-final isHostProvider = StateProvider<bool>((ref) => false);
+final isMicMutedProvider         = StateProvider<bool>((ref) => false);
+final isRoomAudioMutedProvider   = StateProvider<bool>((ref) => false);
+final myCurrentSeatProvider      = StateProvider<int>((ref) => -1);
+final isHostProvider             = StateProvider<bool>((ref) => false);
 
 // ── كتم الدردشة (roomId::userId) ─────────────────────────────────
 final chatMutedProvider = StreamProvider.family<bool, String>((ref, key) {
@@ -242,6 +253,21 @@ final challengeEndTimeProvider = StreamProvider.family<DateTime?, String>((ref, 
         final ts = data['challengeEndTime'] as Timestamp?;
         return ts?.toDate();
       });
+});
+
+// ── عدد الزوار الحاليين (من subcollection members) ───────────────
+final memberCountProvider = StreamProvider.family<int, String>((ref, roomId) {
+  return RoomStateRepository().watchMemberCount(roomId);
+});
+
+// ── قائمة الزوار الحاليين ─────────────────────────────────────
+final roomMembersProvider = StreamProvider.family<List<Map<String, dynamic>>, String>((ref, roomId) {
+  return RoomStateRepository().watchMembers(roomId);
+});
+
+// ── حالة PK Battle (null = لا يوجد PK نشط) ──────────────────────
+final pkStateProvider = StreamProvider.family<PKState?, String>((ref, roomId) {
+  return RoomStateRepository().watchPKState(roomId);
 });
 
 // ── إجمالي هدايا الغرفة (لحساب مستوى الغرفة) ─────────────────────

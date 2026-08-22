@@ -34,12 +34,14 @@ class GsState {
   final int roundId;
   final DateTime phaseStartAt;
   final int? winnerIndex;
+  final int? forcedWinner; // محدد من الأدمن للجولة القادمة
   final List<WinnerInfo> topWinners;
   final List<int> lastWinners; // food indices of last 20 winners (oldest first)
 
   const GsState({
     required this.phase, required this.roundId,
     required this.phaseStartAt, required this.winnerIndex,
+    this.forcedWinner,
     required this.topWinners, required this.lastWinners,
   });
 
@@ -51,11 +53,13 @@ class GsState {
         ?.map((w) => WinnerInfo.fromMap(w as Map<String, dynamic>)).toList() ?? [];
     final lastWinners = (d['lastWinners'] as List<dynamic>?)
         ?.map((w) => (w as num).toInt()).toList() ?? [];
+    final fw = (d['forcedWinner'] as num?)?.toInt();
     return GsState(
       phase: d['phase'] as String? ?? 'betting',
       roundId: (d['roundId'] as num?)?.toInt() ?? 1217,
       phaseStartAt: startAt,
       winnerIndex: (d['winnerIndex'] as num?)?.toInt(),
+      forcedWinner: (fw != null && fw >= 0 && fw < 8) ? fw : null,
       topWinners: winners,
       lastWinners: lastWinners,
     );
@@ -207,7 +211,8 @@ class GreedyStarRepository {
 
   // ── Phase transitions ─────────────────────────────────────────────
 
-  Future<int?> tryTransitionToSpinning(int roundId) async {
+  // forcedWinner يأتي من الـ stream (GsState) — مقروء مسبقاً من المستمع المباشر
+  Future<int?> tryTransitionToSpinning(int roundId, {int? forcedWinner}) async {
     int? winner;
     try {
       await _db.runTransaction((t) async {
@@ -215,20 +220,47 @@ class GreedyStarRepository {
         if (!snap.exists) return;
         final d = snap.data() as Map<String, dynamic>;
         if (d['phase'] != 'betting' || (d['roundId'] as num).toInt() != roundId) return;
-        // استخدم الفائز المحدد من الأدمن إن وجد، وإلا عشوائي
-        final forced = (d['forcedWinner'] as num?)?.toInt();
-        winner = (forced != null && forced >= 0 && forced < 8) ? forced : _pickWinner();
+        // استخدم forcedWinner من الـ stream أو من الوثيقة الحالية كاحتياط
+        final docForced = (d['forcedWinner'] as num?)?.toInt();
+        final effective = forcedWinner ??
+            ((docForced != null && docForced >= 0 && docForced < 8) ? docForced : null);
+        winner = effective ?? _pickWinner();
         t.update(_game, {
-          'phase': 'spinning', 'winnerIndex': winner,
+          'phase': 'spinning',
+          'winnerIndex': winner,
           'phaseStartAt': FieldValue.serverTimestamp(),
-          'forcedWinner': FieldValue.delete(), // يُحذف بعد الاستخدام
+          'forcedWinner': FieldValue.delete(),
         });
       });
     } catch (_) {}
     return winner;
   }
 
-  // يُستدعى من لوحة الأدمن لتحديد الفائز القادم
+  // الأدمن يُنهي الجولة فوراً بالفائز المحدد — لا ينتظر المؤقت
+  Future<String?> forceWinnerNow(int roundId, int winnerIndex) async {
+    try {
+      bool done = false;
+      await _db.runTransaction((t) async {
+        final snap = await t.get(_game);
+        if (!snap.exists) { return; }
+        final d = snap.data() as Map<String, dynamic>;
+        final phase = d['phase'] as String?;
+        final rid   = (d['roundId'] as num?)?.toInt();
+        if (phase != 'betting' || rid != roundId) return;
+        t.update(_game, {
+          'phase': 'spinning',
+          'winnerIndex': winnerIndex,
+          'phaseStartAt': FieldValue.serverTimestamp(),
+        });
+        done = true;
+      });
+      return done ? null : 'الجولة انتهت أو تغيّرت';
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  // يُستدعى من لوحة الأدمن لتحديد الفائز القادم (احتياطي)
   Future<void> setForcedWinner(int? foodIndex) async {
     try {
       if (foodIndex == null) {

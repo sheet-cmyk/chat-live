@@ -127,6 +127,16 @@ class ZegoService {
     }
   }
 
+  Future<void> muteAllAudio(bool muted) async {
+    if (!_initialized) return;
+    try {
+      await ZegoExpressEngine.instance.muteAllPlayStreamAudio(muted);
+      debugPrint('[ZegoService] سماعة الغرفة: ${muted ? "مكتومة" : "مفتوحة"}');
+    } catch (e) {
+      debugPrint('[ZegoService] ❌ خطأ في كتم الغرفة: $e');
+    }
+  }
+
   Future<void> setVoiceEffect(ZegoVoiceChangerPreset preset) async {
     if (!_initialized) return;
     try {

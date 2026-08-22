@@ -26,6 +26,7 @@ class GiftRepository {
     String? receiverName,
     required GiftModel gift,
     int quantity = 1,
+    String? pkTeam, // 'A' or 'B' when PK battle is active
   }) async {
     try {
       final totalCost = gift.coinPrice * quantity;
@@ -61,6 +62,15 @@ class GiftRepository {
           'totalGiftsRoom': FieldValue.increment(totalDiamonds),
         });
       } catch (_) {}
+
+      // تحديث نقاط PK إذا كانت المعركة نشطة
+      if (pkTeam != null) {
+        try {
+          await _db.collection('rooms').doc(roomId).update({
+            'pkTeam$pkTeam': FieldValue.increment(totalDiamonds),
+          });
+        } catch (_) {}
+      }
 
       // تحديث إجمالي ما أرسله المستخدم من هدايا
       try {

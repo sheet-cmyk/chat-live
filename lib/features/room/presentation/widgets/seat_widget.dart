@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/chat_colors.dart';
 import '../../data/models/seat_model.dart';
-import '../providers/room_provider.dart';
 
 // حامل لتفعيل إيموجي جديد حتى عند تكرار نفس الإيموجي
 class EmojiTrigger {
@@ -24,6 +22,7 @@ class SeatWidget extends StatefulWidget {
     this.onTap,
     this.emojiTrigger,
     this.challengeActive = false,
+    this.pkTeam = 0, // 0=none  1=Team A (orange)  2=Team B (blue)
   });
 
   final SeatModel seat;
@@ -32,6 +31,7 @@ class SeatWidget extends StatefulWidget {
   final VoidCallback? onTap;
   final EmojiTrigger? emojiTrigger;
   final bool challengeActive;
+  final int pkTeam;
 
   @override
   State<SeatWidget> createState() => _SeatWidgetState();
@@ -93,10 +93,18 @@ class _SeatWidgetState extends State<SeatWidget>
     super.dispose();
   }
 
+  static const _kTeamA = Color(0xFFFF6B35);
+  static const _kTeamB = Color(0xFF4FC3F7);
+
+  Color get _pkColor => widget.pkTeam == 1 ? _kTeamA : _kTeamB;
+  bool get _hasPk => widget.pkTeam != 0;
+
   @override
   Widget build(BuildContext context) {
-    final seat = widget.seat;
+    final seat       = widget.seat;
     final avatarSize = widget.isHost ? 76.0 : 62.0;
+    final ringSize   = widget.isHost ? 84.0 : 70.0;
+    final hasBar     = !seat.isEmpty && seat.userId != null && seat.sessionDiamonds > 0;
 
     return GestureDetector(
       onTap: widget.onTap,
@@ -104,60 +112,88 @@ class _SeatWidgetState extends State<SeatWidget>
         clipBehavior: Clip.none,
         alignment: Alignment.topCenter,
         children: [
-          // الأفاتار + الاسم
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AnimatedBuilder(
-                animation: _pulseAnim,
-                builder: (_, child) => Transform.scale(
-                  scale: seat.isSpeaking ? _pulseAnim.value : 1.0,
-                  child: child,
-                ),
+              // ── صورة + شريط الهدايا يتداخل مع أسفل الدائرة ────────
+              SizedBox(
+                width: ringSize,
+                height: ringSize,
                 child: Stack(
+                  clipBehavior: Clip.none,
                   alignment: Alignment.center,
                   children: [
-                    if (seat.isSpeaking)
-                      Container(
-                        width: widget.isHost ? 84 : 70,
-                        height: widget.isHost ? 84 : 70,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.primary, width: 2.5),
-                          color: AppColors.primary.withAlpha(30),
-                        ),
+                    // الأفاتار مع نبضة الكلام
+                    AnimatedBuilder(
+                      animation: _pulseAnim,
+                      builder: (_, child) => Transform.scale(
+                        scale: seat.isSpeaking ? _pulseAnim.value : 1.0,
+                        child: child,
                       ),
-                    _buildAvatar(seat),
-                    if (!seat.isEmpty && seat.isMuted)
-                      Positioned(
-                        bottom: 0, right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: const BoxDecoration(
-                            color: AppColors.error,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.mic_off_rounded, size: 9, color: Colors.white),
-                        ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          if (seat.isSpeaking)
+                            Container(
+                              width: ringSize,
+                              height: ringSize,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: _hasPk ? _pkColor : AppColors.primary,
+                                  width: 2.5,
+                                ),
+                                color: (_hasPk ? _pkColor : AppColors.primary).withAlpha(30),
+                              ),
+                            ),
+                          _buildAvatar(seat),
+                          if (!seat.isEmpty && seat.isMuted)
+                            Positioned(
+                              bottom: 0, right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.error,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.mic_off_rounded, size: 9, color: Colors.white),
+                              ),
+                            ),
+                          if (widget.isHost)
+                            Positioned(
+                              top: -4, left: 0,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                decoration: BoxDecoration(
+                                  gradient: AppColors.goldGradient,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text('👑', style: TextStyle(fontSize: 9)),
+                              ),
+                            ),
+                        ],
                       ),
-                    if (widget.isHost)
+                    ),
+                    // شريط الهدايا — يتداخل مع أسفل حافة الدائرة
+                    if (hasBar)
                       Positioned(
-                        top: -4, left: 0,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                          decoration: BoxDecoration(
-                            gradient: AppColors.goldGradient,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Text('👑', style: TextStyle(fontSize: 9)),
+                        bottom: -9,
+                        child: _DiamondBar(
+                          userId: seat.userId!,
+                          isHost: widget.isHost,
+                          sessionDiamonds: seat.sessionDiamonds,
                         ),
                       ),
                   ],
                 ),
               ),
-              const SizedBox(height: 5),
+
+              // مسافة تحسب فيض الشريط
+              SizedBox(height: hasBar ? 13 : 4),
+
+              // ── اسم المستخدم — عريض وقريب من الشريط ────────────────
               SizedBox(
-                width: widget.isHost ? 84 : 70,
+                width: widget.isHost ? 92 : 80,
                 child: Text(
                   seat.isEmpty
                       ? (seat.isLocked ? '🔒' : '+')
@@ -171,16 +207,10 @@ class _SeatWidgetState extends State<SeatWidget>
                         : (seat.isEmpty ? AppColors.textHint : AppColors.textPrimary),
                     fontSize: widget.isHost ? 13 : 11,
                     fontFamily: 'Cairo',
-                    fontWeight: widget.isHost ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: widget.isHost ? FontWeight.w700 : FontWeight.w600,
                   ),
                 ),
               ),
-              if (!seat.isEmpty && seat.userId != null)
-                _DiamondBar(
-                  userId: seat.userId!,
-                  isHost: widget.isHost,
-                  sessionDiamonds: seat.sessionDiamonds,
-                ),
             ],
           ),
 
@@ -229,10 +259,12 @@ class _SeatWidgetState extends State<SeatWidget>
         width: size, height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: widget.isHost ? AppColors.seatHost : AppColors.seatEmpty,
-          border: Border.all(color: AppColors.divider),
+          color: _hasPk ? _pkColor.withAlpha(18) : Colors.transparent,
+          border: Border.all(
+            color: _hasPk ? _pkColor.withAlpha(120) : AppColors.divider.withAlpha(80),
+          ),
         ),
-        child: Icon(Icons.add_rounded, color: AppColors.textHint, size: widget.isHost ? 36 : 28),
+        child: Icon(Icons.add_rounded, color: AppColors.textHint.withAlpha(120), size: widget.isHost ? 36 : 28),
       );
     }
     return Container(
@@ -241,7 +273,11 @@ class _SeatWidgetState extends State<SeatWidget>
         shape: BoxShape.circle,
         color: AppColors.seatOccupied,
         border: Border.all(
-          color: widget.isMe ? AppColors.primary : Colors.transparent,
+          color: widget.isMe
+              ? AppColors.primary
+              : _hasPk
+                  ? _pkColor
+                  : Colors.transparent,
           width: 2,
         ),
       ),
@@ -264,10 +300,10 @@ class _SeatWidgetState extends State<SeatWidget>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  _DiamondBar — شريط ماسات الهدايا تحت اسم المستخدم على المايك
+//  _DiamondBar — شريط تقدم الهدايا (أخضر→أزرق→بنفسجي→أحمر)
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _DiamondBar extends ConsumerWidget {
+class _DiamondBar extends StatelessWidget {
   const _DiamondBar({
     required this.userId,
     required this.sessionDiamonds,
@@ -277,11 +313,12 @@ class _DiamondBar extends ConsumerWidget {
   final int sessionDiamonds;
   final bool isHost;
 
-  static const _tiers = [
-    (5000000, Color(0xFFFF2D55)),
-    (1000000, Color(0xFF9B59B6)),
-    (500000,  Color(0xFF3498DB)),
-    (50000,   Color(0xFF2ECC71)),
+  // (الحد الأدنى، الحد الأعلى، اللون)  —  -1 يعني لا يوجد حد أعلى
+  static const _levels = <(int, int, Color)>[
+    (0,      10000,  Color(0xFF2ECC71)),  // أخضر
+    (10000,  50000,  Color(0xFF3498DB)),  // أزرق
+    (50000,  500000, Color(0xFF9B59B6)), // بنفسجي
+    (500000, -1,     Color(0xFFFF2D55)), // أحمر
   ];
 
   static String _fmt(int n) {
@@ -290,40 +327,60 @@ class _DiamondBar extends ConsumerWidget {
     return '$n';
   }
 
+  (Color, double) _levelAndProgress(int diamonds) {
+    for (int i = _levels.length - 1; i >= 0; i--) {
+      final (min, max, color) = _levels[i];
+      if (diamonds >= min) {
+        final progress = max == -1
+            ? 1.0
+            : ((diamonds - min) / (max - min)).clamp(0.0, 1.0);
+        return (color, progress);
+      }
+    }
+    return (_levels[0].$3, 0.0);
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // لا يظهر الشريط حتى تصل هدية في هذه الجلسة
+  Widget build(BuildContext context) {
     if (sessionDiamonds == 0) return const SizedBox.shrink();
 
-    // لون الشريط بناءً على إجمالي الماسات الكلي (مؤشر الرتبة)
-    final allTime = ref.watch(userGiftDiamondsProvider(userId)).valueOrNull ?? 0;
-    Color barColor = Colors.white;
-    for (final (threshold, c) in _tiers) {
-      if (allTime >= threshold) { barColor = c; break; }
-    }
-
-    final barW = isHost ? 68.0 : 56.0;
-    final fs   = isHost ? 9.5  : 8.5;
+    final barW = isHost ? 72.0 : 62.0;
+    final fs   = isHost ? 9.0  : 8.0;
+    final (color, progress) = _levelAndProgress(sessionDiamonds);
 
     return Container(
-      height: 19,
+      height: 17,
       width: barW,
-      margin: const EdgeInsets.only(top: 4),
+      margin: EdgeInsets.zero,
       decoration: BoxDecoration(
-        color: barColor.withAlpha(38),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: barColor.withAlpha(140), width: 1),
+        color: color.withAlpha(30),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: color.withAlpha(90), width: 0.5),
       ),
-      child: Center(
-        child: Text(
-          '💎 ${_fmt(sessionDiamonds)}',
-          style: TextStyle(
-            color: barColor,
-            fontSize: fs,
-            fontWeight: FontWeight.w700,
-            fontFamily: 'Cairo',
-            height: 1.0,
-          ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(9),
+        child: Stack(
+          children: [
+            // شريط التقدم
+            FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: progress,
+              child: Container(color: color.withAlpha(160)),
+            ),
+            // الرقم في المنتصف
+            Center(
+              child: Text(
+                _fmt(sessionDiamonds),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: fs,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Cairo',
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

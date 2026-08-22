@@ -95,7 +95,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final coins = balance.valueOrNull?['coins'] ?? 0;
     final diamonds = balance.valueOrNull?['diamonds'] ?? 0;
     final level = ref.watch(userLevelProvider);
-    final progress = ref.watch(levelProgressProvider);
     final isAdmin = ref.watch(isAdminProvider).valueOrNull == true;
 
     return authState.when(
@@ -202,29 +201,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       onTap: () => _openEditSheet(uid, profile),
                       child: const Icon(Icons.edit_rounded, color: AppColors.primary, size: 20)),
                   ]),
-                  const SizedBox(height: 10),
-                  // Level badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                    decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient,
-                      borderRadius: BorderRadius.circular(14)),
-                    child: Text('${level.badge} المستوى ${level.level} · ${level.title}',
-                      style: const TextStyle(color: Colors.white, fontFamily: 'Cairo',
-                        fontSize: 12, fontWeight: FontWeight.w700)),
-                  ),
-                  const SizedBox(height: 8),
-                  // Progress
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progress, minHeight: 6,
-                        backgroundColor: AppColors.surfaceLight,
-                        valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                      ),
-                    ),
+                  const SizedBox(height: 16),
+                  // Support Level Bar (مستوى الدعم)
+                  _SupportLevelCard(
+                    diamonds: (profile['totalGiftDiamonds'] as num?)?.toInt()
+                        ?? (profile['diamonds'] as num?)?.toInt()
+                        ?? 0,
                   ),
                   const SizedBox(height: 16),
                   // Stats
@@ -242,9 +224,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       _StatItem(icon: '⭐', value: 'Lv.${level.level}', label: 'المستوى'),
                     ]),
                   ),
-                  const SizedBox(height: 16),
-                  // Gift Level Bar
-                  _GiftLevelBar(profile: profile),
                   const SizedBox(height: 20),
                   // Buttons
                   _PBtn(icon: Icons.account_balance_wallet_rounded, label: 'محفظتي', color: AppColors.gold, onTap: () => context.push(AppRoutes.wallet)),
@@ -511,6 +490,111 @@ class _PBtn extends StatelessWidget {
       ),
     ),
   );
+}
+
+// ── Support Level (مستوى الدعم) ───────────────────────────────────────────────
+
+({int level, int current, int needed}) _calcSupportLevel(int diamonds) {
+  const ranges = [
+    (1,   10,  20000),    (10,  15,  50000),   (15,  30,  120000),
+    (30,  50,  300000),   (50,  70,  500000),   (70,  90,  1500000),
+    (90,  120, 3000000),  (120, 150, 6000000),  (150, 200, 12000000),
+    (200, 300, 25000000), (300, 400, 50000000), (400, 500, 100000000),
+  ];
+  int cum = 0;
+  for (final (s, e, p) in ranges) {
+    final total = (e - s) * p;
+    if (diamonds < cum + total) {
+      final inn = diamonds - cum;
+      final off = inn ~/ p;
+      return (level: s + off, current: inn - off * p, needed: p);
+    }
+    cum += total;
+  }
+  return (level: 500, current: 0, needed: 0);
+}
+
+Color _suppColor(int level) {
+  if (level <  10) return const Color(0xFF9E9E9E);
+  if (level <  30) return const Color(0xFF42A5F5);
+  if (level <  50) return const Color(0xFF66BB6A);
+  if (level <  70) return const Color(0xFFAB47BC);
+  if (level <  90) return const Color(0xFFFFD700);
+  if (level < 150) return const Color(0xFFFF9800);
+  if (level < 300) return const Color(0xFFE91E63);
+  return const Color(0xFFFF5252);
+}
+
+String _suppRank(int level) {
+  if (level <  10) return 'مبتدئ';
+  if (level <  30) return 'ناشئ';
+  if (level <  50) return 'متوسط';
+  if (level <  70) return 'متقدم';
+  if (level <  90) return 'نجم';
+  if (level < 150) return 'أسطورة';
+  if (level < 300) return 'عملاق';
+  return 'خارق';
+}
+
+String _suppFmt(int n) {
+  if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+  if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}K';
+  return '$n';
+}
+
+class _SupportLevelCard extends StatelessWidget {
+  const _SupportLevelCard({required this.diamonds});
+  final int diamonds;
+
+  @override
+  Widget build(BuildContext context) {
+    final info     = _calcSupportLevel(diamonds);
+    final color    = _suppColor(info.level);
+    final rank     = _suppRank(info.level);
+    final progress = info.needed > 0 ? (info.current / info.needed).clamp(0.0, 1.0) : 1.0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // عنوان + رقم المستوى
+          Row(
+            children: [
+              Text(
+                'مستوى الدعم',
+                style: TextStyle(color: color, fontFamily: 'Cairo', fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              Text(
+                'Lv. ${info.level}',
+                style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w800, fontFamily: 'Cairo'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // شريط التقدم
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 7,
+              backgroundColor: AppColors.surfaceLight,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+          const SizedBox(height: 5),
+          // نص التقدم
+          Text(
+            info.needed > 0
+                ? '💎 ${_suppFmt(info.current)} / ${_suppFmt(info.needed)}'
+                : '💎 MAX',
+            style: TextStyle(color: color.withAlpha(180), fontFamily: 'Cairo', fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Gift Level Bar ────────────────────────────────────────────────────────────

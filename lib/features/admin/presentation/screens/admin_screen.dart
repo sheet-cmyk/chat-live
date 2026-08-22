@@ -349,8 +349,10 @@ class _UserActionsSheetState extends State<_UserActionsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 12, left: 16, right: 16),
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 8, top: 12, left: 16, right: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -446,6 +448,7 @@ class _UserActionsSheetState extends State<_UserActionsSheet> {
           const SizedBox(height: 8),
         ],
       ),
+    ),
     );
   }
 
@@ -712,6 +715,8 @@ class _GreedyStarTab extends StatefulWidget {
 
 class _GreedyStarTabState extends State<_GreedyStarTab> {
   final _repo = GreedyStarRepository();
+  int? _selected; // اختيار الأدمن — محلي فقط، لا يُكتب في Firestore
+  bool _loading = false;
 
   static const _foods = <(String emoji, String name, int mult, bool hot)>[
     ('🥕', 'جزر',    5,  false),
@@ -737,8 +742,9 @@ class _GreedyStarTabState extends State<_GreedyStarTab> {
         }
         final data = snap.data;
         final phase = data?['phase'] as String? ?? '...';
-        final roundId = data?['roundId']?.toString() ?? '-';
-        final forcedWinner = (data?['forcedWinner'] as num?)?.toInt();
+        final roundIdInt = (data?['roundId'] as num?)?.toInt() ?? 0;
+        final roundIdStr = data?['roundId']?.toString() ?? '-';
+        final isBetting = phase == 'betting';
 
         return ListView(
           padding: const EdgeInsets.all(14),
@@ -754,90 +760,54 @@ class _GreedyStarTabState extends State<_GreedyStarTab> {
               child: Row(children: [
                 const Icon(Icons.casino_rounded, color: Colors.amber, size: 20),
                 const SizedBox(width: 8),
-                Text('جولة #$roundId',
+                Text('جولة #$roundIdStr',
                   style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 14)),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: phase == 'betting' ? Colors.green.withAlpha(60)
+                    color: isBetting ? Colors.green.withAlpha(60)
                         : phase == 'spinning' ? Colors.orange.withAlpha(60)
                         : Colors.blue.withAlpha(60),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: phase == 'betting' ? Colors.green
+                    border: Border.all(color: isBetting ? Colors.green
                         : phase == 'spinning' ? Colors.orange : Colors.blue),
                   ),
                   child: Text(
-                    phase == 'betting' ? '🟢 رهان' : phase == 'spinning' ? '🔄 دوران' : phase == 'result' ? '🏁 نتيجة' : phase,
+                    isBetting ? '🟢 رهان' : phase == 'spinning' ? '🔄 دوران' : phase == 'result' ? '🏁 نتيجة' : phase,
                     style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 12, fontWeight: FontWeight.w700),
                   ),
                 ),
               ]),
             ),
 
-            const SizedBox(height: 12),
-
-            // ── الفائز الحالي المحدد ──
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: forcedWinner != null
-                    ? Colors.amber.withAlpha(20)
-                    : Colors.white.withAlpha(8),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: forcedWinner != null ? Colors.amber : Colors.white24,
-                ),
-              ),
-              child: Row(children: [
-                Text(
-                  forcedWinner != null ? '⚡ الفائز القادم المحدد:' : '🎲 الجولة القادمة: عشوائي',
-                  style: TextStyle(
-                    color: forcedWinner != null ? Colors.amber : Colors.white54,
-                    fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 13,
-                  ),
-                ),
-                if (forcedWinner != null) ...[
-                  const SizedBox(width: 8),
-                  Text(_foods[forcedWinner].$1, style: const TextStyle(fontSize: 22)),
-                  const SizedBox(width: 4),
-                  Text(_foods[forcedWinner].$2,
-                    style: const TextStyle(color: Colors.white, fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 14)),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => _setWinner(null),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withAlpha(60),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.red),
-                      ),
-                      child: const Text('إلغاء', style: TextStyle(color: Colors.red, fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 12)),
-                    ),
-                  ),
-                ],
-              ]),
-            ),
-
             const SizedBox(height: 16),
 
-            const Text('اختر الفائز للجولة القادمة:',
-              style: TextStyle(color: Colors.white70, fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 13)),
+            // ── تعليمات ──
+            Text(
+              isBetting
+                  ? 'اختر الفائز واضغط "ابدأ الدوران الآن":'
+                  : 'انتظر مرحلة الرهان لتحديد الفائز',
+              style: TextStyle(
+                color: isBetting ? Colors.white70 : Colors.orange,
+                fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 13,
+              ),
+            ),
             const SizedBox(height: 8),
 
             // ── قائمة الخضار ──
             ...List.generate(_foods.length, (i) {
               final (emoji, name, mult, hot) = _foods[i];
-              final isSelected = forcedWinner == i;
+              final isSelected = _selected == i;
               return GestureDetector(
-                onTap: () => _setWinner(isSelected ? null : i),
+                onTap: isBetting ? () => setState(() => _selected = isSelected ? null : i) : null,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: isSelected ? Colors.amber.withAlpha(30) : const Color(0xFF1A0A2E),
+                    color: isSelected ? Colors.amber.withAlpha(30)
+                        : isBetting ? const Color(0xFF1A0A2E) : Colors.black26,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: isSelected ? Colors.amber : Colors.white24,
@@ -848,13 +818,13 @@ class _GreedyStarTabState extends State<_GreedyStarTab> {
                         : [],
                   ),
                   child: Row(children: [
-                    Text(emoji, style: const TextStyle(fontSize: 28)),
+                    Text(emoji, style: TextStyle(fontSize: 28, color: isBetting ? null : const Color(0x88ffffff))),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(name,
                           style: TextStyle(
-                            color: isSelected ? Colors.amber : Colors.white,
+                            color: isSelected ? Colors.amber : isBetting ? Colors.white : Colors.white38,
                             fontFamily: 'Cairo', fontWeight: FontWeight.w800, fontSize: 15,
                           )),
                         if (hot)
@@ -884,23 +854,88 @@ class _GreedyStarTabState extends State<_GreedyStarTab> {
                 ),
               );
             }),
+
+            const SizedBox(height: 16),
+
+            // ── زر "ابدأ الدوران الآن" ──
+            if (isBetting) ...[
+              GestureDetector(
+                onTap: (_selected == null || _loading) ? null : () => _forceWinner(roundIdInt),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  decoration: BoxDecoration(
+                    gradient: _selected != null
+                        ? const LinearGradient(colors: [Color(0xFFD4AF37), Color(0xFFF5C542)])
+                        : null,
+                    color: _selected == null ? Colors.white12 : null,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: _selected != null
+                        ? [BoxShadow(color: Colors.amber.withAlpha(100), blurRadius: 16, spreadRadius: 2)]
+                        : [],
+                  ),
+                  child: Center(
+                    child: _loading
+                        ? const SizedBox(width: 24, height: 24,
+                            child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2.5))
+                        : Text(
+                            _selected != null
+                                ? '🎯 ابدأ الدوران بـ ${_foods[_selected!].$2} ${_foods[_selected!].$1}'
+                                : 'اختر خضاراً أولاً',
+                            style: TextStyle(
+                              color: _selected != null ? Colors.black : Colors.white38,
+                              fontFamily: 'Cairo', fontWeight: FontWeight.w900, fontSize: 15,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              if (_selected != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selected = null),
+                    child: const Center(
+                      child: Text('إلغاء الاختيار',
+                        style: TextStyle(color: Colors.white38, fontFamily: 'Cairo', fontSize: 12)),
+                    ),
+                  ),
+                ),
+            ] else
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(8),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: const Center(
+                  child: Text('الزر متاح فقط أثناء مرحلة الرهان 🟢',
+                    style: TextStyle(color: Colors.white38, fontFamily: 'Cairo', fontSize: 13)),
+                ),
+              ),
           ],
         );
       },
     );
   }
 
-  Future<void> _setWinner(int? index) async {
-    await _repo.setForcedWinner(index);
+  Future<void> _forceWinner(int roundId) async {
+    final idx = _selected;
+    if (idx == null) return;
+    setState(() => _loading = true);
+    final err = await _repo.forceWinnerNow(roundId, idx);
     if (!mounted) return;
-    final name = index != null ? _foods[index].$2 : null;
+    setState(() { _loading = false; if (err == null) _selected = null; });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(
-        name != null ? '✅ تم تحديد $name فائزاً للجولة القادمة' : '🎲 الجولة القادمة ستكون عشوائية',
+        err == null
+            ? '✅ بدأ الدوران — الفائز: ${_foods[idx].$2} ${_foods[idx].$1}'
+            : '❌ فشل: $err',
         style: const TextStyle(fontFamily: 'Cairo'),
       ),
-      backgroundColor: index != null ? Colors.amber.shade700 : Colors.grey.shade700,
-      duration: const Duration(seconds: 2),
+      backgroundColor: err == null ? Colors.green.shade700 : Colors.red.shade700,
+      duration: const Duration(seconds: 3),
     ));
   }
 }
