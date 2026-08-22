@@ -325,8 +325,10 @@ class _UserProfileSheetState extends ConsumerState<UserProfileSheet> {
             controller: ctrl,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            cursorColor: Colors.white,
             style: const TextStyle(color: Colors.white),
             decoration: const InputDecoration(
+              filled: false,
               hintText: 'أو أدخل مبلغاً محدداً',
               hintStyle: TextStyle(color: Colors.white38),
               prefixIcon: Icon(Icons.monetization_on_rounded, color: Colors.amber),

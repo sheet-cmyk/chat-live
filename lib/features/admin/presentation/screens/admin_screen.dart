@@ -463,8 +463,10 @@ class _UserActionsSheetState extends State<_UserActionsSheet> {
           controller: ctrl,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          cursorColor: Colors.white,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
+            filled: false,
             hintText: 'الكمية',
             hintStyle: const TextStyle(color: Colors.white38),
             prefixIcon: Icon(isCoins ? Icons.monetization_on_rounded : Icons.diamond_rounded, color: isCoins ? Colors.amber : Colors.cyanAccent),
@@ -499,8 +501,10 @@ class _UserActionsSheetState extends State<_UserActionsSheet> {
           controller: ctrl,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          cursorColor: Colors.white,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
+            filled: false,
             hintText: 'الرصيد الجديد',
             hintStyle: const TextStyle(color: Colors.white38),
             prefixIcon: Icon(isCoins ? Icons.monetization_on_rounded : Icons.diamond_rounded, color: isCoins ? Colors.amber : Colors.cyanAccent),
@@ -539,8 +543,10 @@ class _UserActionsSheetState extends State<_UserActionsSheet> {
             const SizedBox(height: 12),
             TextField(
               controller: ctrl,
+              cursorColor: Colors.white,
               style: const TextStyle(color: Colors.white, fontFamily: 'Cairo'),
               decoration: const InputDecoration(
+                filled: false,
                 hintText: 'سبب الحظر...',
                 hintStyle: TextStyle(color: Colors.white38),
                 enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
