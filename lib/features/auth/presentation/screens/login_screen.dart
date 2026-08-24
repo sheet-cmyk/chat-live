@@ -1,47 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../app/theme/app_colors.dart';
 import '../../../../app/routes.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
-
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _phoneController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
-  bool _googleLoading = false;
-  bool _guestLoading = false;
-
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _sendOtp() async {
-    if (!_formKey.currentState!.validate()) return;
-    final phone = _phoneController.text.trim();
-    final fullPhone = phone.startsWith('+') ? phone : '+964$phone';
-    await ref.read(otpProvider.notifier).sendOtp(fullPhone);
-
-    final state = ref.read(otpProvider);
-    if (!mounted) return;
-    if (state.codeSent) {
-      context.push(AppRoutes.otp);
-    } else if (state.error != null) {
-      _showError(state.error!);
-    }
-  }
+  bool _loading = false;
 
   Future<void> _googleLogin() async {
-    if (_googleLoading) return;
-    setState(() => _googleLoading = true);
+    if (_loading) return;
+    setState(() => _loading = true);
     try {
       final user = await ref.read(authRepositoryProvider).signInWithGoogle();
       if (!mounted) return;
@@ -52,153 +26,114 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      _showError('فشل تسجيل الدخول بجوجل، يرجى المحاولة مجدداً');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'فشل تسجيل الدخول، يرجى المحاولة مجدداً',
+            style: TextStyle(fontFamily: 'Cairo'),
+          ),
+          backgroundColor: Color(0xFFEA4335),
+        ),
+      );
     } finally {
-      if (mounted) setState(() => _googleLoading = false);
+      if (mounted) setState(() => _loading = false);
     }
-  }
-
-  Future<void> _guestLogin() async {
-    if (_guestLoading) return;
-    setState(() => _guestLoading = true);
-    try {
-      await ref.read(authRepositoryProvider).signInAnonymously();
-      if (!mounted) return;
-      context.go(AppRoutes.home);
-    } catch (e) {
-      if (!mounted) return;
-      _showError('فشل الدخول كضيف، يرجى المحاولة مجدداً');
-    } finally {
-      if (mounted) setState(() => _guestLoading = false);
-    }
-  }
-
-  void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: AppColors.error),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final otpState = ref.watch(otpProvider);
+    final size = MediaQuery.of(context).size;
 
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // خلفية متدرجة
-          Container(decoration: const BoxDecoration(gradient: AppColors.darkGradient)),
-          Positioned(
-            top: -80, left: -50,
-            child: Container(
-              width: 220, height: 220,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.primary.withAlpha(40),
-              ),
-            ),
-          ),
+          // ── زخارف دوائر بألوان Google ────────────────────────────────
+          Positioned(top: -55,  left: -55,   child: _Blob(190, const Color(0xFF4285F4))),
+          Positioned(top: 50,   right: -35,  child: _Blob(110, const Color(0xFF34A853))),
+          Positioned(bottom: -65, right: -45, child: _Blob(210, const Color(0xFFEA4335))),
+          Positioned(bottom: 30,  left: -35,  child: _Blob(130, const Color(0xFFFBBC05))),
+          // نقاط صغيرة عائمة
+          Positioned(top: size.height * 0.36, left: 22,  child: _Blob(18, const Color(0xFF4285F4))),
+          Positioned(top: size.height * 0.42, right: 26, child: _Blob(13, const Color(0xFFEA4335))),
+          Positioned(top: size.height * 0.58, right: 20, child: _Blob(22, const Color(0xFF34A853))),
+          Positioned(top: size.height * 0.63, left: 16,  child: _Blob(15, const Color(0xFFFBBC05))),
+
           SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 60),
-                    // شعار
-                    Container(
-                      width: 90, height: 90,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: AppColors.primaryGradient,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withAlpha(80),
-                            blurRadius: 24, spreadRadius: 4,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(Icons.celebration_rounded, size: 50, color: Colors.white),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Party Hub',
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'سجّل دخولك وابدأ الحفلة',
-                      style: TextStyle(fontSize: 14, color: AppColors.textSecondary, fontFamily: 'Cairo'),
-                    ),
-                    const SizedBox(height: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 36),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(height: size.height * 0.13),
 
-                    // حقل رقم الهاتف
-                    _PhoneField(controller: _phoneController),
-                    const SizedBox(height: 16),
-
-                    // زر إرسال OTP
-                    SizedBox(
-                      width: double.infinity,
-                      height: 54,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: AppColors.primaryGradient,
-                          borderRadius: BorderRadius.circular(14),
+                  // ── أيقونة التطبيق ────────────────────────────────────
+                  Container(
+                    width: 124, height: 124,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(22),
+                          blurRadius: 24,
+                          offset: const Offset(0, 6),
                         ),
-                        child: ElevatedButton(
-                          onPressed: otpState.isLoading ? null : _sendOtp,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                          child: otpState.isLoading
-                              ? const SizedBox(
-                                  width: 22, height: 22,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                )
-                              : const Text('إرسال رمز التحقق', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Cairo')),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-
-                    // فاصل
-                    const Row(
-                      children: [
-                        Expanded(child: Divider(color: AppColors.divider)),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 12),
-                          child: Text('أو', style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo')),
-                        ),
-                        Expanded(child: Divider(color: AppColors.divider)),
                       ],
                     ),
-                    const SizedBox(height: 24),
-
-                    // Google
-                    _SocialButton(
-                      label: 'المتابعة بـ Google',
-                      icon: Icons.g_mobiledata_rounded,
-                      color: const Color(0xFF4285F4),
-                      onTap: _googleLoading ? null : _googleLogin,
-                      isLoading: _googleLoading,
+                    child: ClipOval(
+                      child: Image.asset('assets/icon/icon.a1.png', fit: BoxFit.cover),
                     ),
-                    const SizedBox(height: 12),
+                  ),
 
-                    // ضيف
-                    _SocialButton(
-                      label: 'الدخول كضيف',
-                      icon: Icons.person_outline_rounded,
-                      color: AppColors.surfaceLight,
-                      onTap: _guestLoading ? null : _guestLogin,
-                      isLoading: _guestLoading,
+                  const SizedBox(height: 28),
+
+                  // ── اسم التطبيق ───────────────────────────────────────
+                  const Text(
+                    'LivChat',
+                    style: TextStyle(
+                      fontSize: 40,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1A1A1A),
+                      letterSpacing: -1.0,
                     ),
-                    const SizedBox(height: 32),
-                  ],
-                ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  const Text(
+                    'تواصل، استمتع، وكن جزء من المجتمع',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF5F6368),
+                      fontFamily: 'Cairo',
+                      height: 1.6,
+                    ),
+                  ),
+
+                  const Spacer(),
+
+                  // ── زر تسجيل الدخول بـ Google ──────────────────────────
+                  _GoogleButton(
+                    onTap: _loading ? null : _googleLogin,
+                    isLoading: _loading,
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  Text(
+                    'بتسجيل دخولك توافق على شروط الاستخدام وسياسة الخصوصية',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[400],
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+
+                  const SizedBox(height: 36),
+                ],
               ),
             ),
           ),
@@ -208,68 +143,117 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 }
 
-class _PhoneField extends StatelessWidget {
-  const _PhoneField({required this.controller});
-  final TextEditingController controller;
+// ── دائرة زخرفية ─────────────────────────────────────────────────────────────
+class _Blob extends StatelessWidget {
+  const _Blob(this.size, this.color);
+  final double size;
+  final Color color;
 
   @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: TextInputType.phone,
-      textDirection: TextDirection.ltr,
-      style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo'),
-      decoration: const InputDecoration(
-        hintText: '+964 7XX XXX XXXX',
-        hintStyle: TextStyle(color: AppColors.textHint),
-        prefixIcon: Icon(Icons.phone_rounded, color: AppColors.primary),
-        filled: true,
-        fillColor: AppColors.surfaceLight,
-        border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(14)), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(14)),
-          borderSide: BorderSide(color: AppColors.primary, width: 2),
+  Widget build(BuildContext context) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color.withAlpha(28),
         ),
-      ),
-      validator: (v) {
-        if (v == null || v.trim().isEmpty) return 'أدخل رقم الهاتف';
-        if (v.trim().length < 9) return 'رقم الهاتف غير صحيح';
-        return null;
-      },
-    );
-  }
+      );
 }
 
-class _SocialButton extends StatelessWidget {
-  const _SocialButton({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-    this.isLoading = false,
-  });
-  final String label;
-  final IconData icon;
-  final Color color;
+// ── زر Google ────────────────────────────────────────────────────────────────
+class _GoogleButton extends StatelessWidget {
+  const _GoogleButton({this.onTap, this.isLoading = false});
   final VoidCallback? onTap;
   final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: OutlinedButton.icon(
-        onPressed: onTap,
-        icon: isLoading
-            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: AppColors.textPrimary, strokeWidth: 2))
-            : Icon(icon, color: color),
-        label: Text(label, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo')),
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: AppColors.divider),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 56,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFDEDEDE), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(16),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
+        child: isLoading
+            ? const Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Color(0xFF4285F4),
+                  ),
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CustomPaint(painter: _GoogleGPainter()),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'المتابعة بـ Google',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF3C4043),
+                      fontFamily: 'Cairo',
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
+}
+
+// ── رسم حرف G بألوان Google ──────────────────────────────────────────────────
+class _GoogleGPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double r  = size.width / 2;
+    final Offset c  = Offset(r, r);
+    final double sw = r * 0.34;
+    final double ar = r - sw / 2;
+    final paint = Paint()
+      ..style    = PaintingStyle.stroke
+      ..strokeWidth = sw
+      ..strokeCap   = StrokeCap.butt;
+
+    // أحمر — الأعلى
+    paint.color = const Color(0xFFEA4335);
+    canvas.drawArc(Rect.fromCircle(center: c, radius: ar), -1.57, 1.57, false, paint);
+    // أصفر — اليمين
+    paint.color = const Color(0xFFFBBC05);
+    canvas.drawArc(Rect.fromCircle(center: c, radius: ar), 0.0, 1.57, false, paint);
+    // أخضر — الأسفل
+    paint.color = const Color(0xFF34A853);
+    canvas.drawArc(Rect.fromCircle(center: c, radius: ar), 1.57, 1.57, false, paint);
+    // أزرق — اليسار
+    paint.color = const Color(0xFF4285F4);
+    canvas.drawArc(Rect.fromCircle(center: c, radius: ar), 3.14, 1.14, false, paint);
+
+    // ذراع G الأفقي
+    canvas.drawRect(
+      Rect.fromLTWH(c.dx, c.dy - sw / 2, ar, sw),
+      Paint()..color = const Color(0xFF4285F4)..style = PaintingStyle.fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter old) => false;
 }

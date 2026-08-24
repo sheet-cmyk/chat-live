@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../l10n/app_localizations.dart';
-import '../app/theme/app_colors.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/otp_screen.dart';
 import '../features/auth/presentation/screens/register_screen.dart';
 import '../features/auth/presentation/providers/auth_provider.dart';
 import '../features/home/presentation/screens/main_screen.dart';
+import '../features/home/presentation/providers/home_provider.dart';
 import '../features/room/presentation/screens/room_screen.dart';
 import '../features/home/data/models/room_model.dart';
 import '../features/wallet/presentation/screens/wallet_screen.dart';
@@ -18,7 +18,6 @@ import '../features/search/presentation/screens/search_screen.dart';
 import '../features/settings/presentation/screens/settings_screen.dart';
 import '../features/notifications/presentation/screens/notifications_screen.dart';
 import '../features/wallet/presentation/screens/daily_reward_screen.dart';
-import '../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../features/home/presentation/screens/room_history_screen.dart';
 import '../features/wallet/data/repositories/wallet_repository.dart';
 import '../features/sweet_bonanza/screens/sb_entry_screen.dart';
@@ -159,10 +158,6 @@ final GoRouter appRouter = GoRouter(
       builder: (context, state) => const DailyRewardScreen(),
     ),
     GoRoute(
-      path: '/onboarding',
-      builder: (context, state) => const OnboardingScreen(),
-    ),
-    GoRoute(
       path: '/room-history',
       builder: (context, state) => const RoomHistoryScreen(),
     ),
@@ -196,31 +191,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _navigate() async {
-    await Future.delayed(const Duration(seconds: 2));
-    if (!mounted) return;
-
-    // أول تشغيل → Onboarding
-    final done = await isOnboardingDone();
-    if (!mounted) return;
-    if (!done) { context.go('/onboarding'); return; }
-
-    // انتظر Firebase حتى تُعيد جلسة المستخدم المخزّنة
+    // انتظر Firebase فقط — بدون delay
     final user = await ref.read(authStateProvider.future);
     if (!mounted) return;
 
     if (user != null) {
-      // Bootstrap admin privileges for seed email (safe no-op for others)
       AdminRepository().bootstrapIfNeeded(user);
       final wallet = WalletRepository();
-      // هدية الترحيب للمستخدمين القدامى (تُعطى مرة واحدة فقط)
       wallet.ensureWelcomeBonus(user.uid);
-      // المكافأة اليومية المجانية
       wallet.checkAndClaimDailyFreeCoins(user.uid).then((claimed) {
         if (claimed > 0 && mounted) {
           ref.read(pendingDailyCoinsProvider.notifier).state = claimed;
         }
       });
-      context.go(AppRoutes.home);
+      // استعادة التبويب الأخير الذي كان فيه المستخدم
+      final prefs = await SharedPreferences.getInstance();
+      final lastTab = prefs.getInt('last_nav_tab') ?? 0;
+      if (mounted) ref.read(bottomNavIndexProvider.notifier).state = lastTab;
+      if (mounted) context.go(AppRoutes.home);
     } else {
       context.go(AppRoutes.login);
     }
@@ -228,72 +216,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-
-    return Scaffold(
-      body: Stack(
-        children: [
-          Container(decoration: const BoxDecoration(gradient: AppColors.darkGradient)),
-          Positioned(
-            top: -60, right: -60,
-            child: Container(
-              width: 200, height: 200,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.primary.withAlpha(40),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -80, left: -40,
-            child: Container(
-              width: 250, height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.accent.withAlpha(30),
-              ),
-            ),
-          ),
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 110, height: 110,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: AppColors.primaryGradient,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withAlpha(100),
-                        blurRadius: 30, spreadRadius: 5,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(Icons.celebration_rounded, size: 60, color: Colors.white),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Party Hub',
-                  style: TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: AppColors.textPrimary, letterSpacing: 1.2),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.partyTime,
-                  style: const TextStyle(fontSize: 16, color: AppColors.textSecondary, fontFamily: 'Cairo'),
-                ),
-                const SizedBox(height: 48),
-                const SizedBox(
-                  width: 28, height: 28,
-                  child: CircularProgressIndicator(
-                    color: AppColors.primary, strokeWidth: 2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+    return const Scaffold(backgroundColor: Colors.white);
   }
 }

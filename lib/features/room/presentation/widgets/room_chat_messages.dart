@@ -3,7 +3,8 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/chat_colors.dart';
 import '../../data/models/room_message_model.dart';
 
-typedef UserTapCallback = void Function(String userId, String userName, String? avatar);
+typedef UserTapCallback = void Function(
+    String userId, String userName, String? avatar);
 
 class RoomChatMessages extends StatelessWidget {
   const RoomChatMessages({
@@ -21,12 +22,18 @@ class RoomChatMessages extends StatelessWidget {
   Widget build(BuildContext context) {
     if (messages.isEmpty) return const SizedBox.shrink();
 
+    // المسافة السفلية = ارتفاع الشريط السفلي (52px) + SafeArea حتى لا تختفي الرسائل خلفه
+    final bottomPad = MediaQuery.of(context).padding.bottom + 70.0;
+
+    // reverse: true → أحدث رسالة دائماً في الأسفل، والقديمة تصعد للأعلى
     return ListView.builder(
       controller: scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      reverse: true,
+      padding: EdgeInsets.fromLTRB(12, 8, 12, bottomPad),
       itemCount: messages.length,
       itemBuilder: (_, i) {
-        final msg = messages[i];
+        // عكس الترتيب: i=0 = أحدث رسالة
+        final msg = messages[messages.length - 1 - i];
         if (msg.type == MessageType.emoji) return const SizedBox.shrink();
         if (msg.type == MessageType.gift) return _GiftMessage(msg: msg);
         return msg.isSystem
@@ -81,14 +88,21 @@ class _GiftMessage extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [AppColors.primary.withAlpha(60), AppColors.accent.withAlpha(40)],
+            colors: [
+              AppColors.primary.withAlpha(60),
+              AppColors.accent.withAlpha(40)
+            ],
           ),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.primary.withAlpha(80)),
         ),
         child: Text(
           msg.content,
-          style: const TextStyle(color: AppColors.gold, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
+          style: const TextStyle(
+              color: AppColors.gold,
+              fontSize: 12,
+              fontFamily: 'Cairo',
+              fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -120,7 +134,10 @@ class _UserMessage extends StatelessWidget {
               child: msg.senderAvatar == null
                   ? Text(
                       (msg.senderName ?? '?')[0].toUpperCase(),
-                      style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold),
                     )
                   : null,
             ),
@@ -138,7 +155,8 @@ class _UserMessage extends StatelessWidget {
                   bottomLeft: Radius.circular(14),
                   bottomRight: Radius.circular(4),
                 ),
-                border: Border.all(color: const Color(0xFF00C853).withAlpha(50), width: 0.5),
+                border: Border.all(
+                    color: const Color(0xFF00C853).withAlpha(50), width: 0.5),
               ),
               child: RichText(
                 text: TextSpan(

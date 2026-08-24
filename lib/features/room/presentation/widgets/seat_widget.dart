@@ -93,8 +93,8 @@ class _SeatWidgetState extends State<SeatWidget>
     super.dispose();
   }
 
-  static const _kTeamA = Color(0xFFFF6B35);
-  static const _kTeamB = Color(0xFF4FC3F7);
+  static const _kTeamA = Color(0xFF0A1EA8);  // أزرق عامق
+  static const _kTeamB = Color(0xFFA80A0A);  // أحمر عامق
 
   Color get _pkColor => widget.pkTeam == 1 ? _kTeamA : _kTeamB;
   bool get _hasPk => widget.pkTeam != 0;
@@ -259,12 +259,17 @@ class _SeatWidgetState extends State<SeatWidget>
         width: size, height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: _hasPk ? _pkColor.withAlpha(18) : Colors.transparent,
+          color: _hasPk ? _pkColor : Colors.transparent,
           border: Border.all(
-            color: _hasPk ? _pkColor.withAlpha(120) : AppColors.divider.withAlpha(80),
+            color: _hasPk ? _pkColor : AppColors.divider.withAlpha(80),
+            width: _hasPk ? 2 : 1,
           ),
         ),
-        child: Icon(Icons.add_rounded, color: AppColors.textHint.withAlpha(120), size: widget.isHost ? 36 : 28),
+        child: Icon(
+          _hasPk ? Icons.mic_none_rounded : Icons.add_rounded,
+          color: _hasPk ? Colors.white.withAlpha(200) : AppColors.textHint.withAlpha(120),
+          size: widget.isHost ? 32 : 26,
+        ),
       );
     }
     return Container(

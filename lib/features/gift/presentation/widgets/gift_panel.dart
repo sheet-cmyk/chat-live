@@ -130,10 +130,6 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
               }),
             ),
 
-          // ── كأس المتصدرين ───────────────────────────────────────
-          if (widget.roomId != null)
-            _TopGifters(roomId: widget.roomId!),
-
           // ── شبكة الهدايا مباشرة ──────────────────────────────────
           _GiftGrid(
             gifts: gifts,

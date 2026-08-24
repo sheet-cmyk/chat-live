@@ -290,13 +290,28 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       return;
     }
 
-    // اترك المقعد القديم أولاً
     final mySeat = ref.read(myCurrentSeatProvider);
+    final seatProfile = ref.read(userProfileStreamProvider).valueOrNull;
+
+    // ── تحديث فوري للـ UI (optimistic) ──────────────────────────────
+    final patchNotifier = ref.read(optimisticSeatsProvider(_roomId).notifier);
+    final newSeatModel = SeatModel(
+      index: seat.index,
+      userId: me.uid,
+      userName: me.displayName ?? 'مستخدم',
+      userAvatar: me.photoURL,
+      nameColor: seatProfile?['nameColor'] as String?,
+    );
+    patchNotifier.state = {
+      ...patchNotifier.state,
+      if (mySeat >= 0) mySeat: null, // أفرغ القديم فوراً
+      seat.index: newSeatModel,      // احجز الجديد فوراً
+    };
+
+    // ── اكتب Firestore في الخلفية (بدون await) ───────────────────────
     if (mySeat >= 0) {
       ref.read(seatsWriterProvider(_roomId)).leaveSeatIfOwner(mySeat, me.uid);
     }
-
-    final seatProfile = ref.read(userProfileStreamProvider).valueOrNull;
     ref.read(seatsWriterProvider(_roomId)).takeSeat(
       seat.index,
       userId: me.uid,
@@ -304,6 +319,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       userAvatar: me.photoURL,
       nameColor: seatProfile?['nameColor'] as String?,
     );
+
     ref.read(myCurrentSeatProvider.notifier).state = seat.index;
     ZegoService().setMicMuted(false);
     ref.read(isMicMutedProvider.notifier).state = false;
@@ -462,6 +478,14 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     final pkActive = pk != null && pk.active;
     final maxSeats = ref.watch(roomMaxSeatsProvider(_roomId)).valueOrNull ?? seats.length;
 
+    // ── امسح الـ patches بعد تأكيد Firestore ─────────────────────────
+    ref.listen(roomSeatsStreamProvider(_roomId), (_, __) {
+      final patches = ref.read(optimisticSeatsProvider(_roomId));
+      if (patches.isNotEmpty) {
+        ref.read(optimisticSeatsProvider(_roomId).notifier).state = {};
+      }
+    });
+
     // ── مزامنة حالة المقعد من Firestore إلى Zego ──────────────────
     // Handles: host muting a user, and detecting when kicked from seat.
     ref.listen<List<SeatModel>>(seatsProvider(_roomId), (_, seats) {
@@ -496,11 +520,11 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       if (!next.hasValue) return;
       final msgs = next.value!;
 
-      // تمرير تلقائي للأسفل
+      // تمرير تلقائي للأسفل — في reverse list، أحدث رسالة عند position 0
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollCtrl.hasClients) {
+        if (_scrollCtrl.hasClients && _scrollCtrl.position.pixels != 0) {
           _scrollCtrl.animateTo(
-            _scrollCtrl.position.maxScrollExtent,
+            0.0,
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOut,
           );
@@ -580,6 +604,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                   onLeave: () => _leaveRoom(),
                   onVisitorTap: _showUserProfileFromChat,
                   isHost: isHost,
+                  isAdmin: isAdmin,
                   onSettings: () => _showSettings(context),
                 ),
 
@@ -592,32 +617,34 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                 // شبكة المقاعد
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: _seatColumns(seats.length),
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 4,
-                      childAspectRatio: 0.62,
-                    ),
-                    itemCount: seats.length,
-                    itemBuilder: (_, i) {
-                      final seat = seats[i];
-                      final pkTeam = pkActive
-                          ? (seat.index < maxSeats ~/ 2 ? 1 : 2)
-                          : 0;
-                      return SeatWidget(
-                        seat: seat,
-                        isHost: false,
-                        isMe: seat.userId == _currentUser?.uid,
-                        onTap: () => _onSeatTap(seat),
-                        emojiTrigger: _seatEmoji[seat.index],
-                        challengeActive: challengeActive,
-                        pkTeam: pkTeam,
-                      );
-                    },
-                  ),
+                  child: challengeActive
+                      ? _buildTeamBattleLayout(seats)
+                      : GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: _seatColumns(seats.length),
+                            mainAxisSpacing: 8,
+                            crossAxisSpacing: 4,
+                            childAspectRatio: 0.62,
+                          ),
+                          itemCount: seats.length,
+                          itemBuilder: (_, i) {
+                            final seat = seats[i];
+                            final pkTeam = pkActive
+                                ? (seat.index < maxSeats ~/ 2 ? 1 : 2)
+                                : 0;
+                            return SeatWidget(
+                              seat: seat,
+                              isHost: false,
+                              isMe: seat.userId == _currentUser?.uid,
+                              onTap: () => _onSeatTap(seat),
+                              emojiTrigger: _seatEmoji[seat.index],
+                              challengeActive: challengeActive,
+                              pkTeam: pkTeam,
+                            );
+                          },
+                        ),
                 ),
 
                 // بانر الإعلان
@@ -663,6 +690,116 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     if (count <= 5) return 5;
     if (count <= 10) return 5;
     return 5;
+  }
+
+  Widget _buildTeamBattleLayout(List<SeatModel> seats) {
+    if (seats.isEmpty) return const SizedBox.shrink();
+
+    const deepBlue = Color(0xFF0A1EA8);
+    const deepRed  = Color(0xFFA80A0A);
+
+    final hostSeat = seats[0];
+    final rest     = seats.length > 1 ? seats.sublist(1) : const <SeatModel>[];
+    final half     = (rest.length / 2).ceil();
+    final teamA    = rest.sublist(0, half);
+    final teamB    = half < rest.length ? rest.sublist(half) : const <SeatModel>[];
+    final rowCount = ((teamA.length > teamB.length ? teamA.length : teamB.length) / 2).ceil();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // مقعد المضيف في المنتصف
+        SeatWidget(
+          seat: hostSeat,
+          isHost: true,
+          isMe: hostSeat.userId == _currentUser?.uid,
+          onTap: () => _onSeatTap(hostSeat),
+          emojiTrigger: _seatEmoji[hostSeat.index],
+          challengeActive: true,
+          pkTeam: 0,
+        ),
+        const SizedBox(height: 8),
+        if (rest.isNotEmpty) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(color: deepBlue, borderRadius: BorderRadius.circular(20)),
+                    child: const Text('💙 أزرق', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(color: deepRed, borderRadius: BorderRadius.circular(20)),
+                    child: const Text('❤️ أحمر', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...List.generate(rowCount, (rowIdx) {
+            final aStart = rowIdx * 2;
+            final bStart = rowIdx * 2;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        for (int c = 0; c < 2; c++)
+                          if (aStart + c < teamA.length)
+                            SeatWidget(
+                              seat: teamA[aStart + c],
+                              isHost: false,
+                              isMe: teamA[aStart + c].userId == _currentUser?.uid,
+                              onTap: () => _onSeatTap(teamA[aStart + c]),
+                              emojiTrigger: _seatEmoji[teamA[aStart + c].index],
+                              challengeActive: true,
+                              pkTeam: 1,
+                            )
+                          else
+                            const SizedBox(width: 62),
+                      ],
+                    ),
+                  ),
+                  Container(width: 1, color: Colors.white24),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        for (int c = 0; c < 2; c++)
+                          if (bStart + c < teamB.length)
+                            SeatWidget(
+                              seat: teamB[bStart + c],
+                              isHost: false,
+                              isMe: teamB[bStart + c].userId == _currentUser?.uid,
+                              onTap: () => _onSeatTap(teamB[bStart + c]),
+                              emojiTrigger: _seatEmoji[teamB[bStart + c].index],
+                              challengeActive: true,
+                              pkTeam: 2,
+                            )
+                          else
+                            const SizedBox(width: 62),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ],
+    );
   }
 
   void _showGiftPanel(BuildContext ctx) {
@@ -857,6 +994,7 @@ class _RoomHeader extends ConsumerWidget {
     required this.onLeave,
     required this.onVisitorTap,
     this.isHost = false,
+    this.isAdmin = false,
     this.onSettings,
   });
   final RoomModel room;
@@ -864,6 +1002,7 @@ class _RoomHeader extends ConsumerWidget {
   final VoidCallback onLeave;
   final void Function(String userId, String userName, String? avatar) onVisitorTap;
   final bool isHost;
+  final bool isAdmin;
   final VoidCallback? onSettings;
 
   @override
@@ -944,7 +1083,22 @@ class _RoomHeader extends ConsumerWidget {
                 ],
               ),
             ),
-            // قائمة الثلاث نقاط — يسار أعلى (آخر عنصر = يسار في RTL)
+            // ترس الإعدادات — يظهر للمضيف والمشرف
+            if ((isHost || isAdmin) && onSettings != null) ...[
+              GestureDetector(
+                onTap: onSettings,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withAlpha(90),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.settings_rounded, color: Colors.white, size: 20),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            // قائمة الثلاث نقاط — تصغير/خروج
             _RoomMenuBtn(onMinimize: onMinimize, onLeave: onLeave),
           ],
         ),

@@ -36,17 +36,28 @@ final roomSeatsStreamProvider =
 // مستوى الصوت المحلي (من ZEGOCLOUD)
 final speakingUsersProvider = StateProvider<Set<String>>((ref) => {});
 
-// المقاعد مع حالة التحدث المحلية مدمجة
+// تعديلات محلية فورية قبل تأكيد Firestore (index → SeatModel? ، null = فارغ)
+final optimisticSeatsProvider =
+    StateProvider.family<Map<int, SeatModel?>, String>((_, __) => {});
+
+// المقاعد مع حالة التحدث المحلية مدمجة + الـ optimistic patch
 final seatsProvider = Provider.family<List<SeatModel>, String>((ref, roomId) {
   final maxSeats = ref.watch(roomMaxSeatsProvider(roomId)).valueOrNull ?? 9;
   final seats = ref.watch(roomSeatsStreamProvider(roomId)).valueOrNull ??
       List.generate(maxSeats, (i) => SeatModel(index: i));
+  final patches = ref.watch(optimisticSeatsProvider(roomId));
   final speaking = ref.watch(speakingUsersProvider);
-  return seats
-      .map((s) => s.copyWith(
-            isSpeaking: s.userId != null && speaking.contains(s.userId),
-          ))
-      .toList();
+  return seats.map((s) {
+    final SeatModel base;
+    if (patches.containsKey(s.index)) {
+      base = patches[s.index] ?? SeatModel(index: s.index);
+    } else {
+      base = s;
+    }
+    return base.copyWith(
+      isSpeaking: base.userId != null && speaking.contains(base.userId),
+    );
+  }).toList();
 });
 
 // ── كاتب المقاعد ─────────────────────────────────────────────────

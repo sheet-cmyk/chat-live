@@ -138,18 +138,6 @@ class _RegularBanner extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  record.receiverName != null
-                      ? 'أرسل ${record.giftName} لـ ${record.receiverName}'
-                      : 'أرسل ${record.giftName}',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontFamily: 'Cairo',
-                    fontSize: 10,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
               ],
             ),
           ),
@@ -193,7 +181,6 @@ class _LuxuryBannerState extends State<_LuxuryBanner>
   @override
   Widget build(BuildContext context) {
     final r = widget.record;
-    final qtyLabel = r.quantity > 1 ? ' ×${r.quantity}' : '';
     return AnimatedBuilder(
       animation: _glow,
       builder: (_, child) => Container(
@@ -260,18 +247,6 @@ class _LuxuryBannerState extends State<_LuxuryBanner>
                     fontWeight: FontWeight.w700,
                     fontFamily: 'Cairo',
                     fontSize: 13,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  r.receiverName != null
-                      ? 'أرسل ${r.giftName}$qtyLabel لـ ${r.receiverName}'
-                      : 'أرسل ${r.giftName}$qtyLabel',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontFamily: 'Cairo',
-                    fontSize: 11,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

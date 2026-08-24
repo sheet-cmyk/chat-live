@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/routes.dart';
 import '../../../../core/providers/active_room_provider.dart';
@@ -56,6 +57,12 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   Widget build(BuildContext context) {
     final currentIndex = ref.watch(bottomNavIndexProvider);
     final minimized = ref.watch(minimizedRoomProvider);
+
+    // احفظ التبويب الحالي عند كل تغيير
+    ref.listen(bottomNavIndexProvider, (_, index) async {
+      final prefs = await SharedPreferences.getInstance();
+      prefs.setInt('last_nav_tab', index);
+    });
 
     return Scaffold(
       body: Stack(
