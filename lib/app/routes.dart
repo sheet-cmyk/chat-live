@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/otp_screen.dart';
 import '../features/auth/presentation/screens/register_screen.dart';
+import '../features/auth/presentation/screens/setup_profile_screen.dart';
 import '../features/auth/presentation/providers/auth_provider.dart';
 import '../features/home/presentation/screens/main_screen.dart';
 import '../features/home/presentation/providers/home_provider.dart';
@@ -47,7 +48,8 @@ class AppRoutes {
   static const String sweetBonanza = '/sweet-bonanza';
   static const String notification = '/notification';
   static const String admin = '/admin';
-  static const String greedyStar = '/greedy-star';
+  static const String greedyStar    = '/greedy-star';
+  static const String setupProfile  = '/setup-profile';
 }
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -173,6 +175,10 @@ final GoRouter appRouter = GoRouter(
       path: AppRoutes.greedyStar,
       builder: (context, state) => const GreedyStarScreen(),
     ),
+    GoRoute(
+      path: AppRoutes.setupProfile,
+      builder: (context, state) => const SetupProfileScreen(),
+    ),
   ],
 );
 
@@ -196,6 +202,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     if (!mounted) return;
 
     if (user != null) {
+      // تحقق من وجود ملف شخصي مكتمل في Firestore
+      final profile = await ref.read(authRepositoryProvider).fetchCurrentUser();
+      if (!mounted) return;
+
+      if (profile == null || profile.displayName.isEmpty) {
+        // مستخدم جديد أو لم يُكمل الملف الشخصي
+        context.go(AppRoutes.setupProfile);
+        return;
+      }
+
       AdminRepository().bootstrapIfNeeded(user);
       final wallet = WalletRepository();
       wallet.ensureWelcomeBonus(user.uid);

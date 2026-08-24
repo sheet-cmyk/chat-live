@@ -15,6 +15,20 @@ import '../../../wallet/presentation/providers/wallet_provider.dart';
 import '../../../levels/presentation/providers/level_provider.dart';
 import '../../../admin/presentation/providers/admin_provider.dart';
 
+// ── قائمة الدول ───────────────────────────────────────────────────────────────
+const _kProfileCountries = [
+  ('🇸🇦', 'السعودية'),  ('🇮🇶', 'العراق'),    ('🇦🇪', 'الإمارات'),
+  ('🇰🇼', 'الكويت'),   ('🇶🇦', 'قطر'),        ('🇧🇭', 'البحرين'),
+  ('🇴🇲', 'عُمان'),    ('🇾🇪', 'اليمن'),       ('🇯🇴', 'الأردن'),
+  ('🇸🇾', 'سوريا'),    ('🇱🇧', 'لبنان'),       ('🇵🇸', 'فلسطين'),
+  ('🇪🇬', 'مصر'),      ('🇱🇾', 'ليبيا'),        ('🇹🇳', 'تونس'),
+  ('🇩🇿', 'الجزائر'),  ('🇲🇦', 'المغرب'),       ('🇸🇩', 'السودان'),
+  ('🇹🇷', 'تركيا'),    ('🇮🇷', 'إيران'),         ('🇵🇰', 'باكستان'),
+  ('🇮🇳', 'الهند'),    ('🇬🇧', 'بريطانيا'),     ('🇺🇸', 'أمريكا'),
+  ('🇩🇪', 'ألمانيا'),  ('🇫🇷', 'فرنسا'),        ('🇸🇪', 'السويد'),
+  ('🇨🇦', 'كندا'),     ('🇦🇺', 'أستراليا'),
+];
+
 // ── Upload helper ─────────────────────────────────────────────────────────────
 
 Future<String?> _uploadToStorage(String path, String localPath) async {
@@ -201,7 +215,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       onTap: () => _openEditSheet(uid, profile),
                       child: const Icon(Icons.edit_rounded, color: AppColors.primary, size: 20)),
                   ]),
-                  const SizedBox(height: 16),
+
+                  // ── الجنس + الدولة تحت الاسم ──────────────────────────────
+                  if (profile['gender'] != null || profile['country'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, bottom: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (profile['gender'] != null) ...[
+                            _GenderBadge(gender: profile['gender'] as String),
+                            if (profile['country'] != null)
+                              const SizedBox(width: 8),
+                          ],
+                          if (profile['country'] != null)
+                            _CountryBadge(country: profile['country'] as String),
+                        ],
+                      ),
+                    ),
+
+                  const SizedBox(height: 12),
                   // Support Level Bar (مستوى الدعم)
                   _SupportLevelCard(
                     diamonds: (profile['totalGiftDiamonds'] as num?)?.toInt()
@@ -287,6 +320,8 @@ class _EditSheetState extends State<_EditSheet> {
   bool _loading = false;
   String? _nameColorHex;
   String? _textColorHex;
+  String? _country;
+  String? _gender;
 
   @override
   void initState() {
@@ -295,6 +330,8 @@ class _EditSheetState extends State<_EditSheet> {
       text: widget.profile['displayName'] as String? ?? '');
     _nameColorHex = widget.profile['nameColor'] as String?;
     _textColorHex = widget.profile['textColor'] as String?;
+    _country = widget.profile['country'] as String?;
+    _gender  = widget.profile['gender']  as String?;
   }
 
   @override
@@ -307,6 +344,19 @@ class _EditSheetState extends State<_EditSheet> {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery, imageQuality: 75, maxWidth: 700);
     if (picked != null && mounted) setState(() => _roomFile = picked);
+  }
+
+  Future<void> _pickCountry() async {
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ProfileCountrySheet(
+        selected: _country,
+        onSelect: (c) => Navigator.pop(context, c),
+      ),
+    );
+    if (result != null && mounted) setState(() => _country = result);
   }
 
   Future<void> _save() async {
@@ -329,6 +379,11 @@ class _EditSheetState extends State<_EditSheet> {
 
       if (_nameColorHex != null) updates['nameColor'] = _nameColorHex;
       if (_textColorHex != null) updates['textColor'] = _textColorHex;
+      if (_country != null)      updates['country']   = _country;
+      // الجنس: يُحفظ فقط إذا لم يكن محدداً من قبل (لا يمكن تغييره بعد التحديد)
+      if (widget.profile['gender'] == null && _gender != null) {
+        updates['gender'] = _gender;
+      }
 
       if (updates.isNotEmpty) {
         await FirebaseFirestore.instance
@@ -349,112 +404,258 @@ class _EditSheetState extends State<_EditSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
     final roomPhoto = widget.profile['roomPhoto'] as String?;
+    final genderLocked = widget.profile['gender'] != null;
+
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
+        constraints: BoxConstraints(maxHeight: size.height * 0.90),
         decoration: const BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 36),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 38, height: 4,
-            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 14),
-          const Text('تعديل الملف الشخصي',
-            style: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo',
-              fontWeight: FontWeight.w900, fontSize: 18)),
-          const SizedBox(height: 20),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // handle
+            Container(width: 38, height: 4,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 14),
+            const Text('تعديل الملف الشخصي',
+              style: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo',
+                fontWeight: FontWeight.w900, fontSize: 18)),
+            const SizedBox(height: 16),
 
-          // Name field
-          TextField(
-            controller: _nameCtrl,
-            autofocus: false,
-            maxLength: 30,
-            style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 15),
-            decoration: InputDecoration(
-              labelText: 'الاسم الظاهر',
-              labelStyle: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo'),
-              prefixIcon: const Icon(Icons.person_rounded, color: AppColors.primary),
-              filled: true, fillColor: AppColors.background,
-              counterStyle: const TextStyle(color: AppColors.textHint, fontSize: 10),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.primary, width: 2)),
-            ),
-          ),
-          const SizedBox(height: 14),
+            // محتوى قابل للتمرير
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // الاسم
+                    TextField(
+                      controller: _nameCtrl,
+                      autofocus: false,
+                      maxLength: 30,
+                      style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 15),
+                      decoration: InputDecoration(
+                        labelText: 'الاسم الظاهر',
+                        labelStyle: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo'),
+                        prefixIcon: const Icon(Icons.person_rounded, color: AppColors.primary),
+                        filled: true, fillColor: AppColors.background,
+                        counterStyle: const TextStyle(color: AppColors.textHint, fontSize: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: AppColors.primary, width: 2)),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
 
-          // Room photo picker
-          Align(alignment: Alignment.centerRight,
-            child: const Text('صورة الروم',
-              style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13))),
-          const SizedBox(height: 6),
-          GestureDetector(
-            onTap: _pickRoom,
-            child: Container(
-              height: 110,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.divider),
+                    // الدولة
+                    const Align(alignment: Alignment.centerRight,
+                      child: Text('الدولة',
+                        style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13))),
+                    const SizedBox(height: 6),
+                    GestureDetector(
+                      onTap: _pickCountry,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _country != null ? AppColors.primary : AppColors.divider,
+                            width: _country != null ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Text(_country?.split(' ').first ?? '🌍',
+                              style: const TextStyle(fontSize: 22)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _country != null
+                                    ? _country!.split(' ').sublist(1).join(' ')
+                                    : 'اختر دولتك',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontFamily: 'Cairo', fontSize: 15,
+                                  color: _country != null ? AppColors.textPrimary : AppColors.textHint,
+                                ),
+                              ),
+                            ),
+                            Icon(Icons.keyboard_arrow_down_rounded,
+                              color: _country != null ? AppColors.primary : AppColors.textHint),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // الجنس
+                    const Align(alignment: Alignment.centerRight,
+                      child: Text('الجنس',
+                        style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13))),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _SheetGenderBtn(
+                          symbol: '♀', label: 'أنثى',
+                          selected: _gender == 'female',
+                          activeColor: const Color(0xFFF48FB1),
+                          locked: genderLocked,
+                          onTap: () => setState(() => _gender = 'female'),
+                        ),
+                        const SizedBox(width: 32),
+                        _SheetGenderBtn(
+                          symbol: '♂', label: 'ذكر',
+                          selected: _gender == 'male',
+                          activeColor: const Color(0xFF90CAF9),
+                          locked: genderLocked,
+                          onTap: () => setState(() => _gender = 'male'),
+                        ),
+                      ],
+                    ),
+                    if (genderLocked)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Center(
+                          child: Text('* الجنس لا يمكن تغييره بعد التحديد',
+                            style: TextStyle(color: Color(0xFFE57373), fontFamily: 'Cairo', fontSize: 12)),
+                        ),
+                      ),
+                    const SizedBox(height: 14),
+
+                    // صورة الروم
+                    const Align(alignment: Alignment.centerRight,
+                      child: Text('صورة الروم',
+                        style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13))),
+                    const SizedBox(height: 6),
+                    GestureDetector(
+                      onTap: _pickRoom,
+                      child: Container(
+                        height: 110,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.divider),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: _roomFile != null
+                            ? Image.file(File(_roomFile!.path), fit: BoxFit.cover)
+                            : roomPhoto != null
+                                ? CachedNetworkImage(imageUrl: roomPhoto, fit: BoxFit.cover)
+                                : const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                    Icon(Icons.meeting_room_rounded, color: AppColors.textHint, size: 36),
+                                    SizedBox(height: 6),
+                                    Text('اضغط لاختيار صورة الروم',
+                                      style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo', fontSize: 12)),
+                                  ]),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ألوان
+                    _ColorPicker(
+                      label: 'لون الاسم',
+                      selectedHex: _nameColorHex,
+                      onSelect: (h) => setState(() => _nameColorHex = h),
+                    ),
+                    const SizedBox(height: 14),
+                    _ColorPicker(
+                      label: 'لون الكتابة',
+                      selectedHex: _textColorHex,
+                      onSelect: (h) => setState(() => _textColorHex = h),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
-              clipBehavior: Clip.antiAlias,
-              child: _roomFile != null
-                  ? Image.file(File(_roomFile!.path), fit: BoxFit.cover)
-                  : roomPhoto != null
-                      ? CachedNetworkImage(imageUrl: roomPhoto, fit: BoxFit.cover)
-                      : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          const Icon(Icons.meeting_room_rounded, color: AppColors.textHint, size: 36),
-                          const SizedBox(height: 6),
-                          const Text('اضغط لاختيار صورة الروم',
-                            style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo', fontSize: 12)),
-                        ]),
             ),
-          ),
-          const SizedBox(height: 16),
 
-          // Color pickers
-          _ColorPicker(
-            label: 'لون الاسم',
-            selectedHex: _nameColorHex,
-            onSelect: (h) => setState(() => _nameColorHex = h),
-          ),
-          const SizedBox(height: 14),
-          _ColorPicker(
-            label: 'لون الكتابة',
-            selectedHex: _textColorHex,
-            onSelect: (h) => setState(() => _textColorHex = h),
-          ),
-          const SizedBox(height: 20),
-
-          // Save
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
+            // زر الحفظ (ثابت في الأسفل)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 24, top: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: _loading ? null : _save,
+                  child: _loading
+                      ? const SizedBox(width: 22, height: 22,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                      : const Text('حفظ ✅',
+                          style: TextStyle(color: Colors.white, fontFamily: 'Cairo',
+                            fontWeight: FontWeight.w900, fontSize: 16)),
+                ),
               ),
-              onPressed: _loading ? null : _save,
-              child: _loading
-                  ? const SizedBox(width: 22, height: 22,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                  : const Text('حفظ ✅',
-                      style: TextStyle(color: Colors.white, fontFamily: 'Cairo',
-                        fontWeight: FontWeight.w900, fontSize: 16)),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
 }
 
 // ── Widgets ───────────────────────────────────────────────────────────────────
+
+class _GenderBadge extends StatelessWidget {
+  const _GenderBadge({required this.gender});
+  final String gender;
+
+  @override
+  Widget build(BuildContext context) {
+    final isFemale = gender == 'female';
+    final color = isFemale ? const Color(0xFFF48FB1) : const Color(0xFF90CAF9);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withAlpha(28),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withAlpha(120)),
+      ),
+      child: Text(
+        isFemale ? '♀ أنثى' : '♂ ذكر',
+        style: TextStyle(
+          fontSize: 13, fontFamily: 'Cairo',
+          fontWeight: FontWeight.w600, color: color,
+        ),
+      ),
+    );
+  }
+}
+
+class _CountryBadge extends StatelessWidget {
+  const _CountryBadge({required this.country});
+  final String country;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Text(
+        country,
+        style: const TextStyle(fontSize: 14, fontFamily: 'Cairo', color: AppColors.textPrimary),
+      ),
+    );
+  }
+}
 
 class _StatItem extends StatelessWidget {
   const _StatItem({required this.icon, required this.value, required this.label});
@@ -669,6 +870,173 @@ class _GiftLevelBar extends StatelessWidget {
                 fontSize: 11,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── منتقي الدولة في شاشة الملف الشخصي ───────────────────────────────────────
+
+class _ProfileCountrySheet extends StatefulWidget {
+  const _ProfileCountrySheet({required this.selected, required this.onSelect});
+  final String? selected;
+  final void Function(String) onSelect;
+
+  @override
+  State<_ProfileCountrySheet> createState() => _ProfileCountrySheetState();
+}
+
+class _ProfileCountrySheetState extends State<_ProfileCountrySheet> {
+  final _searchCtrl = TextEditingController();
+  List<(String, String)> _filtered = _kProfileCountries;
+
+  void _onSearch(String q) {
+    setState(() {
+      _filtered = q.isEmpty
+          ? _kProfileCountries
+          : _kProfileCountries.where((c) => c.$2.contains(q) || c.$1.contains(q)).toList();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.72,
+      decoration: const BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 4),
+            width: 40, height: 4,
+            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Text('اختر دولتك',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
+                fontFamily: 'Cairo', color: AppColors.textPrimary)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: _onSearch,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, color: AppColors.textPrimary),
+              decoration: InputDecoration(
+                hintText: 'ابحث عن دولة...',
+                hintStyle: const TextStyle(fontFamily: 'Cairo', color: AppColors.textHint),
+                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textSecondary),
+                filled: true, fillColor: AppColors.background,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.divider),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _filtered.length,
+              itemBuilder: (_, i) {
+                final (flag, name) = _filtered[i];
+                final value = '$flag $name';
+                final isSelected = widget.selected == value;
+                return InkWell(
+                  onTap: () => widget.onSelect(value),
+                  child: Container(
+                    color: isSelected ? AppColors.primary.withAlpha(18) : null,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    child: Row(
+                      children: [
+                        if (isSelected) ...[
+                          const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 18),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(flag, style: const TextStyle(fontSize: 24)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(name, textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 15, fontFamily: 'Cairo',
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                              color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                            )),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── زر الجنس في شاشة التعديل ──────────────────────────────────────────────────
+
+class _SheetGenderBtn extends StatelessWidget {
+  const _SheetGenderBtn({
+    required this.symbol,
+    required this.label,
+    required this.selected,
+    required this.activeColor,
+    required this.locked,
+    required this.onTap,
+  });
+  final String symbol, label;
+  final bool selected, locked;
+  final Color activeColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: locked ? null : onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 90, height: 90,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: selected
+              ? activeColor.withAlpha(locked ? 100 : 180)
+              : AppColors.background,
+          border: Border.all(
+            color: selected ? activeColor : AppColors.divider,
+            width: selected ? 2 : 1,
+          ),
+          boxShadow: selected && !locked
+              ? [BoxShadow(color: activeColor.withAlpha(100), blurRadius: 14, offset: const Offset(0, 4))]
+              : null,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(symbol,
+              style: TextStyle(
+                fontSize: 28,
+                color: selected ? activeColor : AppColors.textHint,
+              )),
+            const SizedBox(height: 2),
+            Text(label,
+              style: TextStyle(
+                fontSize: 11, fontFamily: 'Cairo',
+                color: selected ? activeColor : AppColors.textHint,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+              )),
           ],
         ),
       ),

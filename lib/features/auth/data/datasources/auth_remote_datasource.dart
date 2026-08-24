@@ -44,6 +44,14 @@ class AuthRemoteDataSource {
     return _auth.signInWithCredential(credential);
   }
 
+  // ── Yahoo Login ──────────────────────────────────────────────
+  Future<UserCredential> signInWithYahoo() async {
+    final provider = OAuthProvider('yahoo.com')
+      ..addScope('profile')
+      ..addScope('email');
+    return _auth.signInWithProvider(provider);
+  }
+
   // ── Google Login ─────────────────────────────────────────────
   Future<UserCredential> signInWithGoogle() async {
     final googleUser = await _googleSignIn.signIn();

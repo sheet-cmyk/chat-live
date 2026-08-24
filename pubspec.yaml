@@ -1,7 +1,7 @@
 name: party_hub
 description: Party Hub - Social Voice Chat Party App
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -117,6 +117,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/icon/
     - assets/icons/
     - assets/animations/
     - assets/sounds/

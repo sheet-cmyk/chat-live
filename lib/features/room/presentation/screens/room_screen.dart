@@ -30,6 +30,7 @@ import '../../data/models/room_message_model.dart';
 import '../../data/repositories/room_state_repository.dart';
 import '../widgets/user_profile_sheet.dart';
 import '../widgets/room_announcement_banner.dart';
+import '../widgets/night_sky_background.dart';
 import '../widgets/sound_effects_panel.dart';
 import '../widgets/pk_bar.dart';
 import '../../../admin/presentation/providers/admin_provider.dart';
@@ -595,6 +596,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         body: Stack(
           children: [
             _RoomBackground(coverImage: _coverImageUrl),
+            const Positioned.fill(child: NightSkyBackground()),
 
             Column(
               children: [

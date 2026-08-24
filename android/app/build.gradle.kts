@@ -40,7 +40,7 @@ android {
     defaultConfig {
         applicationId = "com.partyhub.party_hub"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

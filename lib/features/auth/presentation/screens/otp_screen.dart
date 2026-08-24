@@ -6,6 +6,134 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/routes.dart';
 import '../providers/auth_provider.dart';
 
+// ── شاشة OTP لتسجيل الدخول بالهاتف (من login_screen) ────────────────────────
+class OtpLoginScreen extends ConsumerStatefulWidget {
+  const OtpLoginScreen({
+    super.key,
+    required this.verificationId,
+    required this.phoneNumber,
+  });
+
+  final String verificationId;
+  final String phoneNumber;
+
+  @override
+  ConsumerState<OtpLoginScreen> createState() => _OtpLoginScreenState();
+}
+
+class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
+  final _ctrl = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _verify() async {
+    final code = _ctrl.text.trim();
+    if (code.length != 6) { _showError('الرمز يجب أن يكون 6 أرقام'); return; }
+    setState(() => _loading = true);
+    try {
+      final user = await ref.read(authRepositoryProvider).verifyOtpAndLogin(
+        verificationId: widget.verificationId,
+        smsCode: code,
+      );
+      if (!mounted) return;
+      user != null ? context.go(AppRoutes.home) : context.pushReplacement(AppRoutes.register);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loading = false);
+        _showError(e.toString().contains('invalid-verification-code')
+            ? 'الرمز غير صحيح' : 'فشل التحقق، أعد المحاولة');
+      }
+    }
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: const TextStyle(fontFamily: 'Cairo')),
+      backgroundColor: const Color(0xFFEA4335),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: const Color(0xFF1A1A1A),
+        title: const Text('رمز التحقق', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700, color: Color(0xFF1A1A1A))),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(height: 32),
+            Container(
+              width: 80, height: 80,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFF1565C0).withAlpha(16)),
+              child: const Icon(Icons.sms_rounded, size: 38, color: Color(0xFF1565C0)),
+            ),
+            const SizedBox(height: 20),
+            const Text('أدخل رمز التحقق',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF1A1A1A), fontFamily: 'Cairo')),
+            const SizedBox(height: 8),
+            Text('أُرسل رمز مكوّن من 6 أرقام إلى\n${widget.phoneNumber}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 14, color: Color(0xFF5F6368), fontFamily: 'Cairo', height: 1.6)),
+            const SizedBox(height: 36),
+            TextField(
+              controller: _ctrl,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              maxLength: 6,
+              autofocus: true,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (v) { if (v.length == 6) _verify(); },
+              decoration: InputDecoration(
+                hintText: '• • • • • •',
+                hintStyle: const TextStyle(color: Color(0xFFBDBDBD), fontSize: 26, letterSpacing: 10),
+                counterText: '',
+                filled: true,
+                fillColor: const Color(0xFFF8F9FA),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFF1565C0), width: 2.5)),
+                contentPadding: const EdgeInsets.symmetric(vertical: 20),
+              ),
+              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: 14, color: Color(0xFF1A1A1A)),
+            ),
+            const SizedBox(height: 28),
+            GestureDetector(
+              onTap: _loading ? null : _verify,
+              child: Container(
+                width: double.infinity, height: 54,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF0D47A1)]),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [BoxShadow(color: const Color(0xFF1565C0).withAlpha(70), blurRadius: 14, offset: const Offset(0, 5))],
+                ),
+                child: Center(
+                  child: _loading
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                      : const Text('تحقق ودخول', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white, fontFamily: 'Cairo')),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class OtpScreen extends ConsumerStatefulWidget {
   const OtpScreen({super.key});
 
