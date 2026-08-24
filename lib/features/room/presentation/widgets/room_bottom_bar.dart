@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/routes.dart';
 import '../providers/room_provider.dart';
 import '../../../../core/services/zego_service.dart';
 import 'voice_effects_sheet.dart';
+import '../../../game/presentation/screens/greedy_star_screen.dart';
 
 class RoomBottomBar extends ConsumerStatefulWidget {
   const RoomBottomBar({
@@ -72,6 +75,14 @@ class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
     widget.onSendMessage(text, _colorHex(_selectedTextColor));
     _textCtrl.clear();
     setState(() => _showInput = false);
+  }
+
+  void _showRoomGames() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _RoomGamesSheet(parentContext: context),
+    );
   }
 
   void _showCombinedEffects() {
@@ -146,6 +157,13 @@ class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
             await ZegoService().muteAllAudio(newMuted);
           },
           filled: isAudioMuted,
+        ),
+        const SizedBox(width: 6),
+        // ── ألعاب ────────────────────────────────────────────────────
+        _ActionBtn(
+          icon: Icons.sports_esports_rounded,
+          color: const Color(0xFF00C853),
+          onTap: _showRoomGames,
         ),
         const SizedBox(width: 8),
         // ── حقل الدردشة ───────────────────────────────────────────────
@@ -506,6 +524,103 @@ class _ActionBtn extends StatelessWidget {
           border: filled ? Border.all(color: color, width: 1.5) : null,
         ),
         child: Icon(icon, color: filled ? color : Colors.white, size: 20),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  لوحة الألعاب داخل الغرفة
+// ═══════════════════════════════════════════════════════════════════════
+class _RoomGamesSheet extends StatelessWidget {
+  const _RoomGamesSheet({required this.parentContext});
+  final BuildContext parentContext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+          const SizedBox(height: 16),
+          const Text('🎮 الألعاب', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, fontFamily: 'Cairo')),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _GameTile(
+                  emoji: '🍬',
+                  title: 'Sweet Bonanza',
+                  subtitle: 'لعبة الفواكه المتتالية',
+                  gradient: const [Color(0xFFFF6B9D), Color(0xFFFF3D7F)],
+                  onTap: () {
+                    Navigator.pop(context);
+                    parentContext.push(AppRoutes.sweetBonanza);
+                  },
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: _GameTile(
+                  emoji: '⭐',
+                  title: 'Greedy Star',
+                  subtitle: 'راهن على الطعام وادر العجلة',
+                  gradient: const [Color(0xFFF5A623), Color(0xFFD4700A)],
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(parentContext, MaterialPageRoute(builder: (_) => const GreedyStarScreen()));
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GameTile extends StatelessWidget {
+  const _GameTile({
+    required this.emoji,
+    required this.title,
+    required this.subtitle,
+    required this.gradient,
+    required this.onTap,
+  });
+  final String emoji;
+  final String title;
+  final String subtitle;
+  final List<Color> gradient;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [BoxShadow(color: gradient.last.withAlpha(80), blurRadius: 12, offset: const Offset(0, 4))],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 36)),
+            const SizedBox(height: 10),
+            Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800, fontFamily: 'Cairo')),
+            const SizedBox(height: 4),
+            Text(subtitle, style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 11, fontFamily: 'Cairo', height: 1.4)),
+          ],
+        ),
       ),
     );
   }

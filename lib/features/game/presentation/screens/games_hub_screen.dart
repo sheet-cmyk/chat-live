@@ -4,10 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/routes.dart';
 import '../../../../features/wallet/presentation/providers/wallet_provider.dart';
-import 'lucky_wheel_screen.dart';
-import 'dice_betting_screen.dart';
-import 'coin_flip_screen.dart';
-import 'number_guess_screen.dart';
 import 'greedy_star_screen.dart';
 
 class GamesHubScreen extends ConsumerWidget {
@@ -60,34 +56,6 @@ class GamesHubScreen extends ConsumerWidget {
           mainAxisSpacing: 14,
           childAspectRatio: 0.85,
           children: [
-            _GameCard(
-              emoji: '🎰',
-              title: 'عجلة الحظ',
-              subtitle: 'ادفع 20 عملة\nوادر العجلة',
-              gradient: const [Color(0xFF6C5CE7), Color(0xFF4C1D95)],
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LuckyWheelScreen())),
-            ),
-            _GameCard(
-              emoji: '🎲',
-              title: 'لعبة النرد',
-              subtitle: 'راهن على\nزوجي أو فردي',
-              gradient: const [Color(0xFFE17055), Color(0xFFD63031)],
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiceBettingScreen())),
-            ),
-            _GameCard(
-              emoji: '🪙',
-              title: 'عملة أو كتابة',
-              subtitle: 'راهن على\nصورة أو كتابة',
-              gradient: const [Color(0xFFFD79A8), Color(0xFFE84393)],
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CoinFlipScreen())),
-            ),
-            _GameCard(
-              emoji: '🔢',
-              title: 'خمّن الرقم',
-              subtitle: 'اختر رقماً من 1-5\nواربح 4 أضعاف',
-              gradient: const [Color(0xFF00B894), Color(0xFF00796B)],
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NumberGuessScreen())),
-            ),
             _GameCard(
               emoji: '🍬',
               title: 'Sweet Bonanza',
