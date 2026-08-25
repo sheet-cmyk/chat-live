@@ -2,7 +2,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/transaction_model.dart';
 
+class DailyGiftResult {
+  final int secondsRemaining;
+  final bool claimed;
+  final String? error;
+  const DailyGiftResult({
+    required this.secondsRemaining,
+    required this.claimed,
+    this.error,
+  });
+}
+
 class WalletRepository {
+  static const int _dailyGiftCoins = 1200000;
+  static const Duration _dailyGiftInterval = Duration(hours: 24);
   final _db = FirebaseFirestore.instance;
 
   Future<Map<String, int>> getBalance(String userId) async {
@@ -173,6 +186,64 @@ class WalletRepository {
       debugPrint('[Wallet] dailyFreeCoins error: $e');
       return 0;
     }
+  }
+
+  /// Attempts to claim the daily gift of 1,200,000 diamonds.
+  /// Uses a Firestore transaction — cannot be bypassed from the client.
+  /// Returns [DailyGiftResult.claimed] = true on success, or seconds remaining if not yet eligible.
+  Future<DailyGiftResult> claimDailyGift(String userId) async {
+    try {
+      return await _db.runTransaction<DailyGiftResult>((tx) async {
+        final ref = _db.collection('users').doc(userId);
+        final snap = await tx.get(ref);
+        if (!snap.exists) {
+          return const DailyGiftResult(secondsRemaining: 0, claimed: false, error: 'المستخدم غير موجود');
+        }
+
+        final data = snap.data()!;
+        final lastTs = data['lastDailyGiftAt'] as Timestamp?;
+        final now = DateTime.now();
+
+        if (lastTs != null) {
+          final nextClaim = lastTs.toDate().add(_dailyGiftInterval);
+          if (now.isBefore(nextClaim)) {
+            final remaining = nextClaim.difference(now).inSeconds.clamp(1, 86400);
+            return DailyGiftResult(secondsRemaining: remaining, claimed: false);
+          }
+        }
+
+        tx.update(ref, {
+          'coins': FieldValue.increment(_dailyGiftCoins),
+          'lastDailyGiftAt': FieldValue.serverTimestamp(),
+        });
+        tx.set(
+          _db.collection('transactions').doc(),
+          {
+            'userId': userId,
+            'type': 'reward',
+            'coinsChange': _dailyGiftCoins,
+            'diamondsChange': 0,
+            'description': 'المكافأة اليومية 🎁 1,200,000 ذهب',
+            'createdAt': FieldValue.serverTimestamp(),
+          },
+        );
+        return const DailyGiftResult(secondsRemaining: 0, claimed: true);
+      });
+    } catch (e) {
+      debugPrint('[Wallet] claimDailyGift error: $e');
+      return DailyGiftResult(secondsRemaining: 0, claimed: false, error: e.toString());
+    }
+  }
+
+  /// Streams seconds remaining until next daily gift (0 = can claim now).
+  Stream<int> watchDailyGiftSeconds(String userId) {
+    return _db.collection('users').doc(userId).snapshots().map((snap) {
+      if (!snap.exists) return 0;
+      final lastTs = snap.data()?['lastDailyGiftAt'] as Timestamp?;
+      if (lastTs == null) return 0;
+      final nextClaim = lastTs.toDate().add(_dailyGiftInterval);
+      return nextClaim.difference(DateTime.now()).inSeconds.clamp(0, 86400);
+    });
   }
 
   Future<List<TransactionModel>> fetchTransactions(String userId, {int limit = 20}) async {

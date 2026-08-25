@@ -41,8 +41,8 @@ android {
         applicationId = "com.partyhub.party_hub"
         minSdk = 24
         targetSdk = 36
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionCode = 122
+        versionName = "1.2.2"
     }
 
     buildTypes {

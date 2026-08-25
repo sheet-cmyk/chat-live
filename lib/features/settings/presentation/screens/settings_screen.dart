@@ -36,6 +36,13 @@ class SettingsScreen extends ConsumerWidget {
           ),
           _tile(icon: Icons.block_rounded, title: 'قائمة الحظر', onTap: () {}),
           const Divider(color: AppColors.divider, height: 1),
+          _sectionHeader('المكافآت'),
+          _tile(
+            icon: Icons.card_giftcard_rounded,
+            title: 'المكافأة اليومية',
+            onTap: () => context.push('/daily-reward'),
+          ),
+          const Divider(color: AppColors.divider, height: 1),
           _sectionHeader('التطبيق'),
           _tile(
             icon: Icons.language_rounded,

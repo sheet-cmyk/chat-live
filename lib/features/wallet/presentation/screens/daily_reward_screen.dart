@@ -1,37 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../app/theme/app_colors.dart';
-
-// مكافآت كل يوم من التسلسل (1-7)
-const _dailyRewards = [50, 80, 120, 160, 200, 280, 500];
-
-final dailyRewardProvider = FutureProvider<_RewardState>((ref) async {
-  final prefs = await SharedPreferences.getInstance();
-  final lastStr = prefs.getString('last_checkin');
-  final streak = prefs.getInt('checkin_streak') ?? 0;
-  final claimed = prefs.getBool('claimed_today') ?? false;
-
-  final lastDate = lastStr != null ? DateTime.parse(lastStr) : null;
-  final today = DateTime.now();
-  final isNewDay = lastDate == null || !_sameDay(lastDate, today);
-
-  return _RewardState(
-    streak: isNewDay ? streak : streak,
-    canClaim: isNewDay && !claimed,
-    todayReward: _dailyRewards[streak % 7],
-  );
-});
-
-bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
-
-class _RewardState {
-  final int streak, todayReward;
-  final bool canClaim;
-  const _RewardState({required this.streak, required this.todayReward, required this.canClaim});
-}
+import '../../data/repositories/wallet_repository.dart';
 
 class DailyRewardScreen extends ConsumerStatefulWidget {
   const DailyRewardScreen({super.key});
@@ -40,214 +12,371 @@ class DailyRewardScreen extends ConsumerStatefulWidget {
   ConsumerState<DailyRewardScreen> createState() => _DailyRewardScreenState();
 }
 
-class _DailyRewardScreenState extends ConsumerState<DailyRewardScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _scale;
+class _DailyRewardScreenState extends ConsumerState<DailyRewardScreen>
+    with SingleTickerProviderStateMixin {
+  // عداد محلي للعرض السلس
+  int _displaySeconds = -1; // -1 = تحميل
+  Timer? _ticker;
+
+  // اشتراك مباشر بالـ Stream لضمان استقبال القيمة الأولية فوراً
+  StreamSubscription<int>? _streamSub;
+
   bool _claiming = false;
   bool _justClaimed = false;
+
+  late AnimationController _pulseCtrl;
+  late Animation<double> _pulseAnim;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
-    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut);
-  }
 
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
 
-  Future<void> _claim(int coins, int currentStreak) async {
-    if (_claiming) return;
-    setState(() => _claiming = true);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final newStreak = currentStreak + 1;
-      await prefs.setString('last_checkin', DateTime.now().toIso8601String());
-      await prefs.setInt('checkin_streak', newStreak);
-      await prefs.setBool('claimed_today', true);
+    // يُشغّل tick كل ثانية لتحريك العداد
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        if (_displaySeconds > 0) _displaySeconds--;
+      });
+    });
 
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid != null) {
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
-          'coins': FieldValue.increment(coins),
-        });
-      }
-
-      setState(() => _justClaimed = true);
-      await _ctrl.forward();
-      ref.invalidate(dailyRewardProvider);
-    } finally {
-      setState(() => _claiming = false);
+    // الاشتراك بالـ Stream مباشرة → يُعطي القيمة الأولية فور فتح الشاشة
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      _streamSub = WalletRepository().watchDailyGiftSeconds(uid).listen((secs) {
+        if (!mounted) return;
+        // نُزامن فقط لما:
+        // • أول قيمة (_displaySeconds == -1)
+        // • أو بعد الاستلام (secs > 86000 يعني تجدّد)
+        // • أو الفرق كبير (أكثر من 5 ثواني = انحراف)
+        final shouldSync = _displaySeconds == -1 ||
+            secs > _displaySeconds + 5 ||
+            (secs == 0 && _displaySeconds > 5);
+        if (shouldSync) {
+          setState(() => _displaySeconds = secs);
+        }
+      });
     }
   }
 
   @override
+  void dispose() {
+    _ticker?.cancel();
+    _streamSub?.cancel();
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _claim() async {
+    if (_claiming) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    setState(() => _claiming = true);
+    try {
+      final result = await WalletRepository().claimDailyGift(uid);
+      if (!mounted) return;
+
+      if (result.claimed) {
+        setState(() {
+          _justClaimed = true;
+          _displaySeconds = 86400; // Stream سيُزامن القيمة الحقيقية تلقائياً
+        });
+      } else if (result.error != null) {
+        _showSnack(result.error!);
+      } else {
+        // لم تنتهِ الـ 24 ساعة بعد
+        setState(() => _displaySeconds = result.secondsRemaining);
+      }
+    } finally {
+      if (mounted) setState(() => _claiming = false);
+    }
+  }
+
+  void _showSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg, style: const TextStyle(fontFamily: 'Cairo')),
+      backgroundColor: Colors.red,
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  String _formatTime(int totalSeconds) {
+    final h = totalSeconds ~/ 3600;
+    final m = (totalSeconds % 3600) ~/ 60;
+    final s = totalSeconds % 60;
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final rewardAsync = ref.watch(dailyRewardProvider);
+    final loading = _displaySeconds == -1;
+    final canClaim = !loading && _displaySeconds <= 0 && !_justClaimed;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFF0D0D1A),
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: const Color(0xFF0D0D1A),
         elevation: 0,
-        title: const Text('المكافأة اليومية', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_rounded), onPressed: () => Navigator.pop(context)),
+        title: const Text(
+          'المكافأة اليومية',
+          style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700, color: Colors.white),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white70),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
-      body: rewardAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
-        error: (_, __) => const Center(child: Text('خطأ', style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo'))),
-        data: (state) => _buildBody(state),
+      body: loading
+          ? const Center(child: CircularProgressIndicator(color: AppColors.gold))
+          : SingleChildScrollView(
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  _buildHeroCard(canClaim),
+                  const SizedBox(height: 32),
+                  _buildCountdownOrButton(canClaim),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildHeroCard(bool canClaim) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1A1040), Color(0xFF2D1B69)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.gold.withAlpha(60), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.gold.withAlpha(30),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          ScaleTransition(
+            scale: canClaim ? _pulseAnim : const AlwaysStoppedAnimation(1.0),
+            child: Container(
+              width: 100, height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.gold.withAlpha(80),
+                    AppColors.gold.withAlpha(20),
+                  ],
+                ),
+                border: Border.all(color: AppColors.gold, width: 2),
+                boxShadow: canClaim
+                    ? [BoxShadow(color: AppColors.gold.withAlpha(100), blurRadius: 20)]
+                    : [],
+              ),
+              child: const Center(
+                child: Text('🪙', style: TextStyle(fontSize: 44)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'هدية يومية',
+            style: TextStyle(
+              fontFamily: 'Cairo', fontSize: 22,
+              fontWeight: FontWeight.w800, color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('🪙', style: TextStyle(fontSize: 18)),
+              const SizedBox(width: 6),
+              Text(
+                '1,200,000 ذهب',
+                style: TextStyle(
+                  fontFamily: 'Cairo', fontSize: 20,
+                  fontWeight: FontWeight.w900, color: AppColors.gold,
+                  shadows: [Shadow(color: AppColors.gold.withAlpha(150), blurRadius: 8)],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'كل 24 ساعة',
+            style: TextStyle(
+              fontFamily: 'Cairo', fontSize: 13,
+              color: Colors.white.withAlpha(120),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildBody(_RewardState state) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+  Widget _buildCountdownOrButton(bool canClaim) {
+    if (_justClaimed) return _buildClaimedSuccess();
+    if (canClaim) return _buildClaimButton();
+    return _buildCountdown();
+  }
+
+  Widget _buildCountdown() {
+    return Column(
+      children: [
+        const Text(
+          'الوقت المتبقي للهدية القادمة',
+          style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Colors.white54),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 40),
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 30),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1040),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Text(
+            _formatTime(_displaySeconds),
+            style: TextStyle(
+              fontFamily: 'monospace', fontSize: 46,
+              fontWeight: FontWeight.w900, color: AppColors.gold,
+              letterSpacing: 4,
+              shadows: [Shadow(color: AppColors.gold.withAlpha(120), blurRadius: 12)],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 60),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              Text('ساعة',  style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.white38)),
+              Text('دقيقة', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.white38)),
+              Text('ثانية', style: TextStyle(fontFamily: 'Cairo', fontSize: 11, color: Colors.white38)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildClaimButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
         children: [
-          // رأس البطاقة
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              children: [
-                const Text('🎁', style: TextStyle(fontSize: 52)),
-                const SizedBox(height: 12),
-                const Text('تسجيل الحضور اليومي', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, fontFamily: 'Cairo')),
-                const SizedBox(height: 4),
-                Text(
-                  'التسلسل الحالي: ${state.streak} يوم',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13, fontFamily: 'Cairo'),
-                ),
-              ],
-            ),
+          const Text(
+            '🎉 هديتك جاهزة!',
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 16, color: Colors.white70),
           ),
-
-          const SizedBox(height: 24),
-
-          // شبكة المكافآت
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4, mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: 0.85,
-            ),
-            itemCount: 7,
-            itemBuilder: (_, i) {
-              final isPast = i < state.streak % 7;
-              final isToday = i == state.streak % 7;
-              final reward = _dailyRewards[i];
-
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                decoration: BoxDecoration(
-                  color: isPast
-                      ? AppColors.success.withAlpha(30)
-                      : isToday
-                          ? AppColors.gold.withAlpha(40)
-                          : AppColors.surfaceLight,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isPast
-                        ? AppColors.success.withAlpha(80)
-                        : isToday
-                            ? AppColors.gold
-                            : Colors.transparent,
-                    width: isToday ? 2 : 1,
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    isPast
-                        ? const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 22)
-                        : Text(isToday ? '🪙' : '🎁', style: const TextStyle(fontSize: 20)),
-                    const SizedBox(height: 4),
-                    Text(
-                      'يوم ${i + 1}',
-                      style: TextStyle(
-                        color: isToday ? AppColors.gold : AppColors.textSecondary,
-                        fontSize: 10, fontFamily: 'Cairo',
-                        fontWeight: isToday ? FontWeight.w700 : FontWeight.normal,
-                      ),
-                    ),
-                    Text(
-                      '+$reward',
-                      style: TextStyle(
-                        color: isToday ? AppColors.gold : AppColors.textHint,
-                        fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 24),
-
-          // زر المطالبة
-          if (_justClaimed)
-            ScaleTransition(
-              scale: _scale,
+          const SizedBox(height: 20),
+          ScaleTransition(
+            scale: _pulseAnim,
+            child: GestureDetector(
+              onTap: _claiming ? null : _claim,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                width: double.infinity,
+                height: 64,
                 decoration: BoxDecoration(
-                  color: AppColors.success.withAlpha(30),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.success),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.check_circle_rounded, color: AppColors.success),
-                    const SizedBox(width: 8),
-                    Text(
-                      'تم استلام ${state.todayReward} كوين! 🎉',
-                      style: const TextStyle(color: AppColors.success, fontFamily: 'Cairo', fontWeight: FontWeight.w700, fontSize: 15),
+                  gradient: const LinearGradient(
+                    colors: [AppColors.gold, Color(0xFFFFB300)],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.gold.withAlpha(120),
+                      blurRadius: 20,
+                      offset: const Offset(0, 6),
                     ),
                   ],
                 ),
-              ),
-            )
-          else
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: state.canClaim ? AppColors.gold : AppColors.surfaceLight,
-                  foregroundColor: state.canClaim ? Colors.black : AppColors.textHint,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  elevation: state.canClaim ? 4 : 0,
+                child: Center(
+                  child: _claiming
+                      ? const SizedBox(
+                          width: 26, height: 26,
+                          child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2.5),
+                        )
+                      : const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('🎁', style: TextStyle(fontSize: 24)),
+                            SizedBox(width: 10),
+                            Text(
+                              'استلم الهدية',
+                              style: TextStyle(
+                                fontFamily: 'Cairo', fontSize: 20,
+                                fontWeight: FontWeight.w900, color: Colors.black,
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
-                onPressed: state.canClaim ? () => _claim(state.todayReward, state.streak) : null,
-                child: _claiming
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                    : Text(
-                        state.canClaim
-                            ? 'استلم ${state.todayReward} كوين 🪙'
-                            : 'تم الاستلام اليوم ✓',
-                        style: const TextStyle(fontFamily: 'Cairo', fontSize: 16, fontWeight: FontWeight.w700),
-                      ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
 
+  Widget _buildClaimedSuccess() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.green.withAlpha(25),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green.withAlpha(100)),
+      ),
+      child: Column(
+        children: [
+          const Text('✅', style: TextStyle(fontSize: 40)),
+          const SizedBox(height: 12),
+          const Text(
+            'تم استلام هديتك!',
+            style: TextStyle(
+              fontFamily: 'Cairo', fontSize: 18,
+              fontWeight: FontWeight.w800, color: Colors.greenAccent,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '🪙 1,200,000 ذهب أُضيفت لحسابك',
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 14, color: Colors.white70),
+          ),
           const SizedBox(height: 16),
           const Text(
-            '⚡ سجّل حضورك كل يوم للحصول على مكافآت أكبر!',
-            style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo', fontSize: 12),
-            textAlign: TextAlign.center,
+            'الهدية القادمة خلال 24 ساعة',
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 12, color: Colors.white38),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 12),
+          Text(
+            _formatTime(_displaySeconds),
+            style: const TextStyle(
+              fontFamily: 'monospace', fontSize: 28,
+              fontWeight: FontWeight.w800, color: AppColors.gold,
+              letterSpacing: 3,
+            ),
+          ),
         ],
       ),
     );
