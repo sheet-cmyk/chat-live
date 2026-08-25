@@ -7,6 +7,7 @@ import '../providers/gift_provider.dart';
 import '../../../wallet/presentation/providers/wallet_provider.dart';
 import '../../../room/presentation/providers/room_provider.dart';
 import '../../../room/data/models/seat_model.dart';
+import '../../../room/data/models/room_message_model.dart';
 
 // ── ألوان TikTok الداكنة ──────────────────────────────────────────────────
 const _kBg       = Color(0xFF161625);
@@ -55,6 +56,28 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
     super.initState();
     _selectedUserId   = widget.targetUserId;
     _selectedUserName = widget.targetUserName;
+    // إذا ما في هدف محدد مسبقاً، حاول تحديد آخر شخص رسل هدية وهو على المايك
+    if (widget.targetUserId == null && widget.roomId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _autoSelectLastGifter());
+    }
+  }
+
+  // يحدد تلقائياً آخر شخص رسل هدية في الغرفة إذا هو على المايك حالياً
+  void _autoSelectLastGifter() {
+    if (!mounted || widget.roomId == null) return;
+    final me   = FirebaseAuth.instance.currentUser?.uid;
+    final msgs = ref.read(roomChatStreamProvider(widget.roomId!)).valueOrNull ?? [];
+    final giftMsgs = msgs
+        .where((m) => m.type == MessageType.gift && m.senderId != null && m.senderId != me)
+        .toList();
+    if (giftMsgs.isEmpty) return;
+    final last  = giftMsgs.last;
+    final seats = ref.read(seatsProvider(widget.roomId!));
+    if (!seats.any((s) => s.userId == last.senderId)) return; // مو على المايك
+    setState(() {
+      _selectedUserId   = last.senderId;
+      _selectedUserName = last.senderName ?? '';
+    });
   }
 
   @override
@@ -143,6 +166,22 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
               ref.read(selectedGiftProvider.notifier).state = g;
               setState(() => _quantity = 1);
               HapticFeedback.selectionClick();
+            },
+            onSend: (g) {
+              final needTarget = widget.roomId != null || widget.targetUserId != null;
+              if (needTarget && _selectedUserId == null) {
+                HapticFeedback.heavyImpact();
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('اختر شخصاً أولاً 👆',
+                      style: TextStyle(fontFamily: 'Cairo')),
+                  backgroundColor: Colors.redAccent,
+                  duration: Duration(seconds: 2),
+                ));
+                return;
+              }
+              setState(() => _quantity = 1);
+              ref.read(selectedGiftProvider.notifier).state = g;
+              _doSend(g);
             },
           ),
 
@@ -341,12 +380,14 @@ class _GiftGrid extends StatelessWidget {
     required this.category,
     required this.onCategoryChanged,
     required this.onGiftSelected,
+    required this.onSend,
   });
   final AsyncValue<List<GiftModel>> gifts;
   final GiftModel? selected;
   final GiftCategory category;
   final VoidCallback onCategoryChanged;
   final void Function(GiftModel) onGiftSelected;
+  final void Function(GiftModel) onSend;
 
   @override
   Widget build(BuildContext context) {
@@ -356,7 +397,7 @@ class _GiftGrid extends StatelessWidget {
         _CategoryTabs(onChanged: onCategoryChanged),
         const SizedBox(height: 10),
         SizedBox(
-          height: 260,
+          height: 280,
           child: gifts.when(
             loading: () => const Center(
               child: CircularProgressIndicator(color: _kCardSel, strokeWidth: 2),
@@ -375,7 +416,7 @@ class _GiftGrid extends StatelessWidget {
                   crossAxisCount: 4,
                   mainAxisSpacing: 8,
                   crossAxisSpacing: 8,
-                  childAspectRatio: 0.8,
+                  childAspectRatio: 0.72,
                 ),
                 itemCount: filtered.length,
                 itemBuilder: (_, i) {
@@ -384,6 +425,7 @@ class _GiftGrid extends StatelessWidget {
                     gift: g,
                     isSelected: selected?.id == g.id,
                     onTap: () => onGiftSelected(g),
+                    onSend: () => onSend(g),
                   );
                 },
               );
@@ -674,10 +716,12 @@ class _GiftCard extends StatelessWidget {
     required this.gift,
     required this.isSelected,
     required this.onTap,
+    required this.onSend,
   });
   final GiftModel gift;
   final bool isSelected;
   final VoidCallback onTap;
+  final VoidCallback onSend;
 
   @override
   Widget build(BuildContext context) {
@@ -700,7 +744,7 @@ class _GiftCard extends StatelessWidget {
           children: [
             if (gift.isSpecial)
               Positioned(
-                top: 4, left: 4,
+                top: 3, left: 3,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
@@ -714,42 +758,72 @@ class _GiftCard extends StatelessWidget {
                           fontWeight: FontWeight.w800, letterSpacing: 0.5)),
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    gift.emoji,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: gift.isSpecial ? 32 : 30, height: 1.1),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    gift.name,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 10,
-                        fontFamily: 'Cairo', fontWeight: FontWeight.w500),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('💎', style: TextStyle(fontSize: 9)),
-                      const SizedBox(width: 2),
-                      Text(
-                        _fmt(gift.coinPrice),
-                        style: const TextStyle(
-                            color: _kPriceClr, fontSize: 10,
-                            fontWeight: FontWeight.w700),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 6),
+                Text(
+                  gift.emoji,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: gift.isSpecial ? 28 : 26, height: 1.1),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  gift.name,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 9,
+                      fontFamily: 'Cairo', fontWeight: FontWeight.w500),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('💎', style: TextStyle(fontSize: 8)),
+                    const SizedBox(width: 2),
+                    Text(
+                      _fmt(gift.coinPrice),
+                      style: const TextStyle(
+                          color: _kPriceClr, fontSize: 9,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // ── زر الإرسال المباشر ──────────────────────────────
+                GestureDetector(
+                  onTap: onSend,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+                    height: 22,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: isSelected
+                            ? [_kCardSel, const Color(0xFFFF2D55)]
+                            : [const Color(0xFFFF4D6D), const Color(0xFFCC003D)],
                       ),
-                    ],
+                      borderRadius: BorderRadius.circular(7),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _kCardSel.withAlpha(100),
+                          blurRadius: 4, offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      'إرسال',
+                      style: TextStyle(
+                        color: Colors.white, fontSize: 10,
+                        fontFamily: 'Cairo', fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
         ),
@@ -845,95 +919,3 @@ class _QuantityStrip extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  _TopGifters — أعلى المرسلين في الغرفة (كأس)
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _TopGifters extends ConsumerWidget {
-  const _TopGifters({required this.roomId});
-  final String roomId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final leaders = ref.watch(roomGiftLeaderboardProvider(roomId)).valueOrNull;
-    if (leaders == null || leaders.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(bottom: 6),
-            child: Text(
-              '🏆 أعلى المرسلين',
-              style: TextStyle(
-                color: Color(0xFFFFD700),
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Cairo',
-              ),
-            ),
-          ),
-          SizedBox(
-            height: 68,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: leaders.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (_, i) {
-                final l = leaders[i];
-                final medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        CircleAvatar(
-                          radius: 22,
-                          backgroundColor: const Color(0xFF2A2A44),
-                          backgroundImage:
-                              l.avatar != null ? NetworkImage(l.avatar!) : null,
-                          child: l.avatar == null
-                              ? Text(
-                                  l.name.isNotEmpty ? l.name[0].toUpperCase() : '؟',
-                                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                                )
-                              : null,
-                        ),
-                        Positioned(
-                          top: -4, right: -4,
-                          child: Text(medals[i], style: const TextStyle(fontSize: 12)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    SizedBox(
-                      width: 52,
-                      child: Text(
-                        l.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 9, fontFamily: 'Cairo'),
-                      ),
-                    ),
-                    Text(
-                      '💎 ${_fmt(l.total)}',
-                      style: const TextStyle(
-                          color: Color(0xFF4CF0FF),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-          const Divider(color: Colors.white12, height: 12),
-        ],
-      ),
-    );
-  }
-}

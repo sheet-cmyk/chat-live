@@ -73,6 +73,7 @@ class SeatsWriter {
     int userLevel = 1,
     int userVip = 0,
     String? nameColor,
+    int sessionDiamonds = 0,
   }) async {
     await _repo.takeSeat(
       _roomId,
@@ -84,6 +85,7 @@ class SeatsWriter {
         userLevel: userLevel,
         userVip: userVip,
         nameColor: nameColor,
+        sessionDiamonds: sessionDiamonds,
       ),
     );
   }

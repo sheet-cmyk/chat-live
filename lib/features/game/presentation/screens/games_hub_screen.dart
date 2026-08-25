@@ -5,6 +5,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/routes.dart';
 import '../../../../features/wallet/presentation/providers/wallet_provider.dart';
 import 'greedy_star_screen.dart';
+import '../../../slot_machine/screens/slot_machine_screen.dart';
 
 class GamesHubScreen extends ConsumerWidget {
   const GamesHubScreen({super.key});
@@ -69,6 +70,13 @@ class GamesHubScreen extends ConsumerWidget {
               subtitle: 'راهن على الطعام\nوادر العجلة',
               gradient: const [Color(0xFFF5A623), Color(0xFFD4700A)],
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GreedyStarScreen())),
+            ),
+            _GameCard(
+              emoji: '🎰',
+              title: 'Slot Machine',
+              subtitle: '5 بكرات\n20 خط ربح',
+              gradient: const [Color(0xFF6A0DAD), Color(0xFF3D0070)],
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SlotMachineScreen())),
             ),
           ],
         ),

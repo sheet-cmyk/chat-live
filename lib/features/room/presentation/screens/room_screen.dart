@@ -3,6 +3,7 @@ import 'dart:math' show pi, cos, sin;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,6 +11,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../home/data/repositories/room_history_repository.dart';
+import '../../../../app/routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../data/models/seat_model.dart';
 import '../../../home/data/models/room_model.dart';
@@ -53,6 +55,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   final _currentUser = FirebaseAuth.instance.currentUser;
   late final String _roomId;
   bool _leftCleanly = false;
+  bool _isNavigatingToRoom = false;
+  double _swipeStartY = 0;
+  bool _swipeMoved = false;
   String _announcement = '';
   late final DateTime _joinedAt;
   String? _lastGiftMsgId;
@@ -195,6 +200,27 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     Navigator.of(context).pop();
   }
 
+  // الانتقال للغرفة المجاورة (أعلى/أسفل) — يغادر الغرفة الحالية ثم يفتح الجديدة
+  RoomModel? _getAdjacentRoom(bool next) {
+    final rooms = ref.read(roomsStreamProvider(null)).valueOrNull ?? [];
+    if (rooms.isEmpty) return null;
+    final idx = rooms.indexWhere((r) => r.roomId == _roomId);
+    if (idx < 0) return null;
+    final newIdx = next ? idx + 1 : idx - 1;
+    if (newIdx < 0 || newIdx >= rooms.length) return null;
+    return rooms[newIdx];
+  }
+
+  Future<void> _goToRoom(RoomModel newRoom) async {
+    if (_isNavigatingToRoom) return;
+    _isNavigatingToRoom = true;
+    ref.read(minimizedRoomProvider.notifier).state = null;
+    _leftCleanly = false;
+    final savedSeat = ref.read(myCurrentSeatProvider);
+    await _cleanup(savedSeat: savedSeat);
+    if (mounted) context.replace(AppRoutes.room, extra: newRoom);
+  }
+
   // خروج كلي من الغرفة — ينزل من المايك ويغادر ZEGO
   Future<void> _leaveRoom() async {
     // امسح حالة التصغير إن وجدت
@@ -294,8 +320,45 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       return;
     }
 
+    // تأكيد الصعود على المايك
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('صعود المايك', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 16)),
+        content: const Text('هل تريد الصعود على المايك؟', style: TextStyle(color: Colors.white70, fontFamily: 'Cairo')),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('لا', style: TextStyle(color: Colors.redAccent, fontFamily: 'Cairo', fontSize: 15)),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF7C4DFF),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('نعم', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 15)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     final mySeat = ref.read(myCurrentSeatProvider);
     final seatProfile = ref.read(userProfileStreamProvider).valueOrNull;
+
+    // ── احمل الذهب المتراكم من المقعد القديم عند الانتقال ───────────
+    int carryDiamonds = 0;
+    if (mySeat >= 0) {
+      final currentSeats = ref.read(seatsProvider(_roomId));
+      if (mySeat < currentSeats.length) {
+        carryDiamonds = currentSeats[mySeat].sessionDiamonds;
+      }
+    }
 
     // ── تحديث فوري للـ UI (optimistic) ──────────────────────────────
     final patchNotifier = ref.read(optimisticSeatsProvider(_roomId).notifier);
@@ -305,11 +368,12 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       userName: me.displayName ?? 'مستخدم',
       userAvatar: me.photoURL,
       nameColor: seatProfile?['nameColor'] as String?,
+      sessionDiamonds: carryDiamonds,
     );
     patchNotifier.state = {
       ...patchNotifier.state,
       if (mySeat >= 0) mySeat: null, // أفرغ القديم فوراً
-      seat.index: newSeatModel,      // احجز الجديد فوراً
+      seat.index: newSeatModel,      // احجز الجديد مع الذهب المتراكم
     };
 
     // ── اكتب Firestore في الخلفية (بدون await) ───────────────────────
@@ -322,6 +386,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       userName: me.displayName ?? 'مستخدم',
       userAvatar: me.photoURL,
       nameColor: seatProfile?['nameColor'] as String?,
+      sessionDiamonds: carryDiamonds,
     );
 
     ref.read(myCurrentSeatProvider.notifier).state = seat.index;
@@ -473,6 +538,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
   @override
   Widget build(BuildContext context) {
+    // نشترك في قائمة الغرف حتى تكون جاهزة وقت السحب بين الغرف
+    ref.watch(roomsStreamProvider(null));
+
     final seats = ref.watch(seatsProvider(_roomId));
     final messagesAsync = ref.watch(roomChatStreamProvider(_roomId));
     final messages = messagesAsync.valueOrNull ?? [];
@@ -600,7 +668,30 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         resizeToAvoidBottomInset: false,
-        body: Stack(
+        body: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (e) {
+            _swipeStartY = e.position.dy;
+            _swipeMoved = false;
+          },
+          onPointerMove: (e) {
+            if ((e.position.dy - _swipeStartY).abs() > 12) _swipeMoved = true;
+          },
+          onPointerUp: (e) {
+            if (!_swipeMoved || _isNavigatingToRoom) return;
+            final screenH = MediaQuery.of(context).size.height;
+            // فقط إذا بدأ السحب في منطقة المقاعد/الهيدر (فوق الشات)
+            if (_swipeStartY > screenH * 0.72) return;
+            final dy = e.position.dy - _swipeStartY;
+            if (dy < -70) {
+              final next = _getAdjacentRoom(true);
+              if (next != null) _goToRoom(next);
+            } else if (dy > 70) {
+              final prev = _getAdjacentRoom(false);
+              if (prev != null) _goToRoom(prev);
+            }
+          },
+          child: Stack(
           children: [
             _RoomBackground(coverImage: _coverImageUrl),
             const Positioned.fill(child: NightSkyBackground()),
@@ -692,6 +783,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
             // ── لوحة لعبة النرد (overlay سفلي) ──────────────────────
             _DiceGameOverlay(roomId: _roomId),
           ],
+        ),
         ),
       ),
     ));
@@ -1029,6 +1121,175 @@ class _RoomBgPainter extends CustomPainter {
 }
 
 // ── رأس الغرفة ─────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+//  لوحة الداعمين (تفتح عند الضغط على الكأس)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _LeaderboardSheet extends StatelessWidget {
+  const _LeaderboardSheet({
+    required this.roomId,
+    required this.leaders,
+    required this.onGiftTap,
+  });
+  final String roomId;
+  final List<GiftLeader> leaders;
+  final void Function(GiftLeader) onGiftTap;
+
+  static const _medals = ['🥇', '🥈', '🥉'];
+
+  String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K';
+    return '$n';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        16, 12, 16, MediaQuery.of(context).padding.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // العنوان
+          const Row(
+            children: [
+              Text('🏆', style: TextStyle(fontSize: 20)),
+              SizedBox(width: 8),
+              Text(
+                'لوحة الداعمين',
+                style: TextStyle(
+                  color: Colors.white, fontFamily: 'Cairo',
+                  fontSize: 16, fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (leaders.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Text(
+                'لا يوجد داعمون بعد',
+                style: TextStyle(color: Colors.white38, fontFamily: 'Cairo', fontSize: 14),
+              ),
+            )
+          else
+            ...leaders.asMap().entries.map((e) {
+              final rank   = e.key;
+              final leader = e.value;
+              final medal  = rank < _medals.length ? _medals[rank] : '#${rank + 1}';
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Row(
+                  children: [
+                    // ترتيب
+                    SizedBox(
+                      width: 30,
+                      child: Text(
+                        medal,
+                        style: TextStyle(
+                          fontSize: rank < 3 ? 18 : 13,
+                          color: rank < 3 ? null : Colors.white54,
+                          fontFamily: 'Cairo',
+                          fontWeight: FontWeight.w700,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // صورة
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: const Color(0xFF333355),
+                      backgroundImage: leader.avatar != null && leader.avatar!.isNotEmpty
+                          ? NetworkImage(leader.avatar!)
+                          : null,
+                      child: (leader.avatar == null || leader.avatar!.isEmpty)
+                          ? Text(
+                              leader.name.isNotEmpty ? leader.name[0] : '?',
+                              style: const TextStyle(color: Colors.white, fontFamily: 'Cairo'),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    // الاسم + الماسات
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            leader.name,
+                            style: const TextStyle(
+                              color: Colors.white, fontFamily: 'Cairo',
+                              fontSize: 13, fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Row(
+                            children: [
+                              const Text('💎', style: TextStyle(fontSize: 10)),
+                              const SizedBox(width: 3),
+                              Text(
+                                _fmt(leader.total),
+                                style: const TextStyle(
+                                  color: Color(0xFF4CF0FF),
+                                  fontSize: 11, fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    // زر الهدية
+                    GestureDetector(
+                      onTap: () => onGiftTap(leader),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFF4D6D), Color(0xFFCC003D)],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          '🎁 هدية',
+                          style: TextStyle(
+                            color: Colors.white, fontFamily: 'Cairo',
+                            fontSize: 12, fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 class _RoomHeader extends ConsumerWidget {
   const _RoomHeader({
     required this.room,
@@ -1047,12 +1308,20 @@ class _RoomHeader extends ConsumerWidget {
   final bool isAdmin;
   final VoidCallback? onSettings;
 
+  String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K';
+    return '$n';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final totalGifts = ref.watch(roomTotalGiftsProvider(room.roomId)).valueOrNull ?? 0;
-    final lvlIdx = giftSendLevelIndex(totalGifts);
-    final lvl = kRoomLevels[lvlIdx];
+    final totalGifts  = ref.watch(roomTotalGiftsProvider(room.roomId)).valueOrNull ?? 0;
+    final lvlIdx      = giftSendLevelIndex(totalGifts);
+    final lvl         = kRoomLevels[lvlIdx];
     final memberCount = ref.watch(memberCountProvider(room.roomId)).valueOrNull ?? room.onlineCount;
+    final leaders     = ref.watch(roomGiftLeaderboardProvider(room.roomId)).valueOrNull;
+    final topGifter   = leaders != null && leaders.isNotEmpty ? leaders.first : null;
 
     return SafeArea(
       bottom: false,
@@ -1060,10 +1329,12 @@ class _RoomHeader extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: [
+            // ── الجانب الأيسر: اسم الغرفة + مستوى + كأس الداعم ─────
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // اسم الغرفة + مستوى الهدايا
                   Row(
                     children: [
                       Flexible(
@@ -1092,32 +1363,66 @@ class _RoomHeader extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 4),
+                  // كأس الداعم الأول — يفتح لوحة الداعمين كاملة
                   GestureDetector(
                     onTap: () => showModalBottomSheet(
                       context: context,
                       backgroundColor: Colors.transparent,
                       isScrollControlled: true,
-                      builder: (_) => _VisitorsSheet(
+                      builder: (sheetCtx) => _LeaderboardSheet(
                         roomId: room.roomId,
-                        onVisitorTap: onVisitorTap,
+                        leaders: leaders ?? [],
+                        onGiftTap: (leader) => showModalBottomSheet(
+                          context: sheetCtx,
+                          backgroundColor: Colors.transparent,
+                          isScrollControlled: true,
+                          builder: (_) => GiftPanel(
+                            roomId: room.roomId,
+                            targetUserId: leader.userId,
+                            targetUserName: leader.name,
+                            targetUserAvatar: leader.avatar,
+                          ),
+                        ),
                       ),
                     ),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: Colors.black.withAlpha(100),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.primary.withAlpha(80), width: 1),
+                        border: Border.all(color: const Color(0xFFFFD700).withAlpha(120), width: 1),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.remove_red_eye_rounded, size: 11, color: AppColors.primary),
+                          const Text('🏆', style: TextStyle(fontSize: 12)),
                           const SizedBox(width: 4),
-                          Text(
-                            '$memberCount',
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontFamily: 'Cairo', fontWeight: FontWeight.w600),
-                          ),
+                          if (topGifter != null) ...[
+                            Text(
+                              topGifter.name.length > 10
+                                  ? '${topGifter.name.substring(0, 9)}…'
+                                  : topGifter.name,
+                              style: const TextStyle(
+                                color: Color(0xFFFFD700), fontSize: 11,
+                                fontFamily: 'Cairo', fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Text('💎', style: TextStyle(fontSize: 9)),
+                            const SizedBox(width: 2),
+                            Text(
+                              _fmt(topGifter.total),
+                              style: const TextStyle(
+                                color: Color(0xFF4CF0FF), fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ] else
+                            const Text(
+                              '—',
+                              style: TextStyle(color: Colors.white38, fontSize: 11, fontFamily: 'Cairo'),
+                            ),
                         ],
                       ),
                     ),
@@ -1125,6 +1430,44 @@ class _RoomHeader extends ConsumerWidget {
                 ],
               ),
             ),
+
+            // ── الجانب الأيمن: العين + ضبط + ثلاث نقاط ─────────────
+            // عداد الزوار (العين)
+            GestureDetector(
+              onTap: () => showModalBottomSheet(
+                context: context,
+                backgroundColor: Colors.transparent,
+                isScrollControlled: true,
+                builder: (_) => _VisitorsSheet(
+                  roomId: room.roomId,
+                  onVisitorTap: onVisitorTap,
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withAlpha(90),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.primary.withAlpha(80), width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.remove_red_eye_rounded, size: 12, color: AppColors.primary),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$memberCount',
+                      style: const TextStyle(
+                        color: Colors.white, fontSize: 11,
+                        fontFamily: 'Cairo', fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+
             // ترس الإعدادات — يظهر للمضيف والمشرف
             if ((isHost || isAdmin) && onSettings != null) ...[
               GestureDetector(
@@ -1138,8 +1481,9 @@ class _RoomHeader extends ConsumerWidget {
                   child: const Icon(Icons.settings_rounded, color: Colors.white, size: 20),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
             ],
+
             // قائمة الثلاث نقاط — تصغير/خروج
             _RoomMenuBtn(onMinimize: onMinimize, onLeave: onLeave),
           ],

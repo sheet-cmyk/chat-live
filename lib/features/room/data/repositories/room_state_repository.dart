@@ -71,7 +71,8 @@ class RoomStateRepository {
       'userLevel': seat.userLevel,
       'userVip': seat.userVip,
       'nameColor': seat.nameColor,
-      'sessionDiamonds': 0, // يصفّر عند كل جلوس جديد
+      // يحمل الذهب المتراكم عند الانتقال بين المقاعد — يصفّر فقط عند مغادرة المايك كلياً
+      'sessionDiamonds': seat.sessionDiamonds,
     });
   }
 

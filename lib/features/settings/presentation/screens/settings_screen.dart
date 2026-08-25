@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/routes.dart';
 import '../../../../core/localization/locale_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -27,6 +29,7 @@ class SettingsScreen extends ConsumerWidget {
       ),
       body: ListView(
         children: [
+          const _ProfileInfoCard(),
           _sectionHeader('الحساب'),
           _tile(icon: Icons.person_outline_rounded, title: 'تعديل الملف الشخصي', onTap: () {}),
           _tile(
@@ -146,6 +149,229 @@ class SettingsScreen extends ConsumerWidget {
               if (context.mounted) context.go(AppRoutes.login);
             },
             child: const Text('خروج', style: TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── بطاقة الملف الشخصي (جنس + دولة + إحصاءات) ───────────────────
+class _ProfileInfoCard extends ConsumerWidget {
+  const _ProfileInfoCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(userProfileStreamProvider).valueOrNull;
+    final gender   = profile?['gender']        as String?;
+    final country  = profile?['country']        as String?;
+    final followers = (profile?['followersCount'] as num?)?.toInt() ?? 0;
+    final following = (profile?['followingCount'] as num?)?.toInt() ?? 0;
+    final visitors  = (profile?['visitorsCount']  as num?)?.toInt() ?? 0;
+
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+    if (gender == null && country == null) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // الجنس + الدولة
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              if (gender != null) _badge(
+                icon: gender == 'female' ? '♀' : '♂',
+                label: gender == 'female' ? 'أنثى' : 'ذكر',
+                color: gender == 'female' ? const Color(0xFFFF6B9D) : const Color(0xFF4DABF7),
+              ),
+              if (country != null && country.isNotEmpty)
+                _badge(
+                  icon: country.split(' ').first,
+                  label: country.split(' ').length > 1 ? country.split(' ').sublist(1).join(' ') : country,
+                  color: AppColors.primary,
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // الثلاث أزرار
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                _StatBtn(
+                  count: following,
+                  label: 'متابعين',
+                  onTap: () => _showList(context, uid, 'following', 'المتابَعون'),
+                ),
+                const VerticalDivider(color: AppColors.divider, width: 1),
+                _StatBtn(
+                  count: followers,
+                  label: 'معجبين',
+                  onTap: () => _showList(context, uid, 'followers', 'المعجبون'),
+                ),
+                const VerticalDivider(color: AppColors.divider, width: 1),
+                _StatBtn(
+                  count: visitors,
+                  label: 'زوار',
+                  onTap: () => _showList(context, uid, 'visitors', 'الزوار'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _badge({required String icon, required String label, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withAlpha(25),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withAlpha(80)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(icon, style: const TextStyle(fontSize: 13)),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(color: color, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  void _showList(BuildContext context, String uid, String collection, String title) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _UserListSheet(uid: uid, collection: collection, title: title),
+    );
+  }
+}
+
+class _StatBtn extends StatelessWidget {
+  const _StatBtn({required this.count, required this.label, required this.onTap});
+  final int count;
+  final String label;
+  final VoidCallback onTap;
+
+  String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K';
+    return '$n';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _fmt(count),
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontFamily: 'Cairo',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontFamily: 'Cairo',
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Sheet قائمة المستخدمين (متابعين / معجبين / زوار)
+class _UserListSheet extends StatelessWidget {
+  const _UserListSheet({required this.uid, required this.collection, required this.title});
+  final String uid;
+  final String collection;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.55,
+      minChildSize: 0.35,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (_, ctrl) => Column(
+        children: [
+          const SizedBox(height: 10),
+          Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 12),
+          Text(title, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          const Divider(color: AppColors.divider, height: 1),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
+                  .collection(collection)
+                  .orderBy('addedAt', descending: true)
+                  .limit(50)
+                  .snapshots(),
+              builder: (ctx, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final docs = snap.data?.docs ?? [];
+                if (docs.isEmpty) {
+                  return const Center(
+                    child: Text('لا يوجد بيانات بعد', style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo')),
+                  );
+                }
+                return ListView.builder(
+                  controller: ctrl,
+                  itemCount: docs.length,
+                  itemBuilder: (_, i) {
+                    final d = docs[i].data() as Map<String, dynamic>;
+                    final name   = d['displayName'] as String? ?? d['name'] as String? ?? 'مستخدم';
+                    final avatar = d['avatar']      as String?;
+                    return ListTile(
+                      leading: CircleAvatar(
+                        radius: 20,
+                        backgroundColor: AppColors.surfaceLight,
+                        backgroundImage: avatar != null ? NetworkImage(avatar) : null,
+                        child: avatar == null ? Text(name.isNotEmpty ? name[0] : '؟', style: const TextStyle(color: Colors.white, fontFamily: 'Cairo')) : null,
+                      ),
+                      title: Text(name, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 13)),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),

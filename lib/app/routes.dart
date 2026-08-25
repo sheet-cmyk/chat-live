@@ -124,7 +124,7 @@ final GoRouter appRouter = GoRouter(
       path: AppRoutes.room,
       builder: (context, state) {
         final room = state.extra as RoomModel;
-        return RoomScreen(room: room);
+        return RoomScreen(key: ValueKey(room.roomId), room: room);
       },
     ),
     GoRoute(
