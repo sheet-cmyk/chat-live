@@ -124,7 +124,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
             smsCode: cred.smsCode!,
           );
           if (!mounted) return;
-          result != null
+          (result != null && result.displayName.isNotEmpty)
               ? context.go(AppRoutes.home)
               : context.go(AppRoutes.setupProfile);
         } catch (_) {
@@ -151,7 +151,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
         smsCode: _otpCtrl.text.trim(),
       );
       if (!mounted) return;
-      user != null
+      (user != null && user.displayName.isNotEmpty)
           ? context.go(AppRoutes.home)
           : context.go(AppRoutes.setupProfile);
     } catch (e) {

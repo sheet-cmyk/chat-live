@@ -17,6 +17,9 @@ class ZegoService {
   String? get currentRoomId => _currentRoomId;
   bool get isInRoom => _currentRoomId != null;
 
+  bool _isPublishing = false;
+  bool get isPublishing => _isPublishing;
+
   // مستمعو الأحداث — يربطها RoomScreen
   void Function(String userId, String userName)? onUserJoined;
   void Function(String userId)? onUserLeft;
@@ -91,12 +94,11 @@ class ZegoService {
         config: config,
       );
 
-      // بدء البث الصوتي — الميك مكتوم افتراضياً حتى يأخذ المستخدم مقعداً
-      await ZegoExpressEngine.instance.startPublishingStream('${roomId}_$userId');
-      await ZegoExpressEngine.instance.muteMicrophone(true);
-
       // Route audio to loudspeaker (default is earpiece for voice calls).
       await ZegoExpressEngine.instance.setAudioRouteToSpeaker(true);
+      // Do NOT startPublishingStream here — that would capture the microphone
+      // even when the user is audience-only, which blocks incoming phone calls.
+      // Publishing starts only when the user takes a seat (startPublishing).
 
       _currentRoomId = roomId;
       debugPrint('[ZegoService] ✅ دخل الغرفة: $roomId');
@@ -105,10 +107,39 @@ class ZegoService {
     }
   }
 
+  // Start capturing the microphone and publishing to the room stream.
+  // Must be called when the user takes a seat, not at join time.
+  Future<void> startPublishing(String roomId, String userId) async {
+    if (!_initialized || _isPublishing) return;
+    try {
+      await ZegoExpressEngine.instance.startPublishingStream('${roomId}_$userId');
+      await ZegoExpressEngine.instance.muteMicrophone(false);
+      _isPublishing = true;
+      debugPrint('[ZegoService] 🎙 startPublishing: ${roomId}_$userId');
+    } catch (e) {
+      debugPrint('[ZegoService] ❌ خطأ في startPublishing: $e');
+    }
+  }
+
+  // Stop publishing and RELEASE the microphone hardware so phone calls work.
+  Future<void> stopPublishing() async {
+    if (!_initialized || !_isPublishing) return;
+    try {
+      await ZegoExpressEngine.instance.stopPublishingStream();
+      _isPublishing = false;
+      debugPrint('[ZegoService] 🎙 stopPublishing — mic released');
+    } catch (e) {
+      debugPrint('[ZegoService] ❌ خطأ في stopPublishing: $e');
+    }
+  }
+
   Future<void> leaveRoom() async {
     if (!_initialized) return;
     try {
-      await ZegoExpressEngine.instance.stopPublishingStream();
+      if (_isPublishing) {
+        await ZegoExpressEngine.instance.stopPublishingStream();
+        _isPublishing = false;
+      }
       await ZegoExpressEngine.instance.logoutRoom();
       _currentRoomId = null;
       debugPrint('[ZegoService] تم مغادرة الغرفة');
@@ -118,7 +149,7 @@ class ZegoService {
   }
 
   Future<void> setMicMuted(bool muted) async {
-    if (!_initialized) return;
+    if (!_initialized || !_isPublishing) return;
     try {
       await ZegoExpressEngine.instance.muteMicrophone(muted);
       debugPrint('[ZegoService] الميك: ${muted ? "مكتوم" : "مفتوح"}');

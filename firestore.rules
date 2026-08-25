@@ -62,6 +62,13 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
         allow delete: if isOwner(userId);
       }
+
+      // سجل معاملات المحفظة (رهانات، أرباح، هدايا...)
+      match /transactions/{txId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId);
+        allow update, delete: if false;
+      }
     }
 
     // ── الغرف ─────────────────────────────────────────────────────
@@ -225,6 +232,20 @@ service cloud.firestore {
           allow create: if isOwner(userId);
           allow update: if isOwner(userId);
         }
+      }
+    }
+
+    // ── لعبة النرد داخل الغرف ─────────────────────────────────────
+    // المسار: games/dice/{roomId}/currentRound
+    match /games/dice/{roomId}/currentRound {
+      allow read: if isSignedIn();
+      // أي مستخدم مسجّل يمكنه تحديث الجولة (الرهان، requestRoll، النتيجة، الجولة التالية)
+      allow write: if isSignedIn();
+
+      // رهانات المستخدمين: كل مستخدم يكتب فقط لنفسه
+      match /bets/{userId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && request.auth.uid == userId;
       }
     }
 

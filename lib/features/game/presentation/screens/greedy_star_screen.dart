@@ -68,7 +68,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
   // Local UI
   String _localPhase = 'loading';
   int _countdown = 30;
-  int _resultCountdown = 7;
+  int _resultCountdown = 5;
   int _highlight = -1;
 
   int _selectedAmount = 1000; // active chip on amount bar
@@ -185,7 +185,7 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
         final s = state.secsRemainingFor(30);
         if (mounted) setState(() => _countdown = s);
       } else if (state.phase == 'result') {
-        final s = state.secsRemainingFor(7);
+        final s = state.secsRemainingFor(5);
         if (mounted) setState(() => _resultCountdown = s);
       }
     }
@@ -219,13 +219,13 @@ class _GSState extends ConsumerState<GreedyStarScreen> with TickerProviderStateM
       setState(() {
         _localPhase = 'result';
         _highlight = state.winnerIndex ?? -1;
-        _resultCountdown = state.secsRemainingFor(7);
+        _resultCountdown = state.secsRemainingFor(5);
       });
       _resultCtrl.forward();
       if (state.winnerIndex != null) _tryAutoClaim(state.roundId, state.winnerIndex!);
       _t1 = Timer.periodic(const Duration(seconds: 1), (t) {
         if (!mounted) { t.cancel(); return; }
-        final rem = _state?.secsRemainingFor(7) ?? 0;
+        final rem = _state?.secsRemainingFor(5) ?? 0;
         setState(() => _resultCountdown = rem);
         if (rem <= 0) { t.cancel(); _repo.tryStartNextRound(state.roundId); }
       });

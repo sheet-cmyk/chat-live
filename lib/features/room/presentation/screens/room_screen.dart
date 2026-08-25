@@ -36,6 +36,8 @@ import '../widgets/pk_bar.dart';
 import '../../../admin/presentation/providers/admin_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../app/theme/chat_colors.dart';
+import '../../../games/dice_game/providers/dice_game_providers.dart';
+import '../../../games/dice_game/dice_game_panel.dart';
 
 class RoomScreen extends ConsumerStatefulWidget {
   const RoomScreen({super.key, required this.room});
@@ -57,6 +59,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   String? _coverImageUrl;
   String? _lastEmojiMsgId;
   final Map<int, EmojiTrigger> _seatEmoji = {};
+  int _cachedSeat = -1;              // updated in build — avoids ref.read in dispose
+  StreamSubscription<bool>? _kickSub; // cancelled in dispose
 
   @override
   void initState() {
@@ -125,7 +129,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       await zego.startSoundLevelMonitor();
 
     // استمع لقرار الطرد من الغرفة
-    RoomStateRepository().watchRoomKick(_roomId, me.uid).listen((kicked) {
+    _kickSub = RoomStateRepository().watchRoomKick(_roomId, me.uid).listen((kicked) {
       if (kicked && mounted) {
         _leftCleanly = false;
         _cleanup();
@@ -218,17 +222,16 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     if (me == null) return;
     RoomStateRepository().leaveSeatIfOwner(_roomId, mySeat, me.uid);
     ref.read(myCurrentSeatProvider.notifier).state = -1;
-    ZegoService().setMicMuted(true);
+    ZegoService().stopPublishing();   // release mic so phone calls work
     ref.read(isMicMutedProvider.notifier).state = true;
   }
 
   @override
   void dispose() {
+    _kickSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _scrollCtrl.dispose();
-    // Read seat index BEFORE super.dispose() invalidates ref.
-    final savedSeat = ref.read(myCurrentSeatProvider);
-    _cleanup(savedSeat: savedSeat);
+    _cleanup(savedSeat: _cachedSeat); // use cached value — never touch ref in dispose
     super.dispose();
   }
 
@@ -266,7 +269,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     await RoomStateRepository().leaveRoom(roomId: _roomId, userId: me.uid);
   }
 
-  void _onSeatTap(SeatModel seat) {
+  Future<void> _onSeatTap(SeatModel seat) async {
     final me = _currentUser;
     if (me == null) return;
     final isHost = ref.read(isHostProvider);
@@ -322,7 +325,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     );
 
     ref.read(myCurrentSeatProvider.notifier).state = seat.index;
-    ZegoService().setMicMuted(false);
+    // Start capturing mic only now (releases it when user leaves the seat)
+    await ZegoService().startPublishing(_roomId, me.uid);
     ref.read(isMicMutedProvider.notifier).state = false;
   }
 
@@ -357,8 +361,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       ref.read(seatsWriterProvider(_roomId)).leaveSeat(index);
     }
     ref.read(myCurrentSeatProvider.notifier).state = -1;
-    // كتم الميكروفون عند النزول من المقعد وتحديث الزر فوراً
-    ZegoService().setMicMuted(true);
+    // Release the microphone so incoming phone calls can use it
+    ZegoService().stopPublishing();
     ref.read(isMicMutedProvider.notifier).state = true;
   }
 
@@ -486,6 +490,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         ref.read(optimisticSeatsProvider(_roomId).notifier).state = {};
       }
     });
+
+    // ── كاش مقعد المستخدم لاستخدامه في dispose بدون ref ──────────
+    _cachedSeat = ref.watch(myCurrentSeatProvider);
 
     // ── مزامنة حالة المقعد من Firestore إلى Zego ──────────────────
     // Handles: host muting a user, and detecting when kicked from seat.
@@ -681,6 +688,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
             // أنيميشن الهدايا
             const GiftAnimationOverlay(),
+
+            // ── لوحة لعبة النرد (overlay سفلي) ──────────────────────
+            _DiceGameOverlay(roomId: _roomId),
           ],
         ),
       ),
@@ -845,6 +855,36 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         onEditAnnouncement: _showEditAnnouncement,
         onEditRoom: _showEditRoom,
         onChangeCover: _pickCoverFromRoom,
+      ),
+    );
+  }
+}
+
+// ── لوحة النرد كـ overlay ───────────────────────────────────────────
+class _DiceGameOverlay extends ConsumerWidget {
+  const _DiceGameOverlay({required this.roomId});
+  final String roomId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isVisible   = ref.watch(diceGameVisibleProvider);
+    final activeRoomId = ref.watch(diceGameRoomIdProvider);
+    if (!isVisible || activeRoomId != roomId) return const SizedBox.shrink();
+
+    final mq          = MediaQuery.of(context);
+    final screenHeight = mq.size.height;
+    // ارفع اللوحة فوق navigation bar الهاتف
+    final navBarHeight = mq.viewPadding.bottom;
+
+    return Positioned(
+      left: 0, right: 0,
+      bottom: navBarHeight,           // فوق أزرار الهاتف مباشرةً
+      height: screenHeight * 0.56,
+      child: DiceGamePanel(
+        roomId: roomId,
+        onClose: () {
+          ref.read(diceGameVisibleProvider.notifier).state = false;
+        },
       ),
     );
   }

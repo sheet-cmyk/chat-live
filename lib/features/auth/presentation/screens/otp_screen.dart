@@ -41,7 +41,9 @@ class _OtpLoginScreenState extends ConsumerState<OtpLoginScreen> {
         smsCode: code,
       );
       if (!mounted) return;
-      user != null ? context.go(AppRoutes.home) : context.pushReplacement(AppRoutes.register);
+      (user != null && user.displayName.isNotEmpty)
+          ? context.go(AppRoutes.home)
+          : context.go(AppRoutes.setupProfile);
     } catch (e) {
       if (mounted) {
         setState(() => _loading = false);

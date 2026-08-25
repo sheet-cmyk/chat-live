@@ -24,7 +24,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final user = await ref.read(authRepositoryProvider).signInWithGoogle();
       if (!mounted) return;
-      user != null ? context.go(AppRoutes.home) : context.go(AppRoutes.setupProfile);
+      // Check displayName — _listenAuth() creates a bare Firestore doc the moment
+      // auth fires, so user != null is true even for brand-new accounts.
+      (user != null && user.displayName.isNotEmpty)
+          ? context.go(AppRoutes.home)
+          : context.go(AppRoutes.setupProfile);
     } catch (_) {
       if (mounted) _showError('فشل تسجيل الدخول بـ Google');
     } finally {
@@ -39,7 +43,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final user = await ref.read(authRepositoryProvider).signInWithYahoo();
       if (!mounted) return;
-      user != null ? context.go(AppRoutes.home) : context.go(AppRoutes.setupProfile);
+      (user != null && user.displayName.isNotEmpty)
+          ? context.go(AppRoutes.home)
+          : context.go(AppRoutes.setupProfile);
     } on Exception catch (e) {
       if (!mounted) return;
       final msg = e.toString();

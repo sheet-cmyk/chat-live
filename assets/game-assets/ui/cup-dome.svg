@@ -1,0 +1,49 @@
+<svg viewBox="0 0 260 260" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="domeGlass" cx="35%" cy="20%" r="80%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="40%" stop-color="#bfe8ff" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#8fc7de" stop-opacity="0.08"/>
+    </radialGradient>
+    <linearGradient id="domeBase" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2f6e5c"/>
+      <stop offset="100%" stop-color="#173a30"/>
+    </linearGradient>
+    <linearGradient id="domeStand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c9a24b"/>
+      <stop offset="100%" stop-color="#7a5a1e"/>
+    </linearGradient>
+  </defs>
+  <!-- stand -->
+  <rect x="90" y="205" width="80" height="24" rx="6" fill="url(#domeStand)"/>
+  <ellipse cx="130" cy="230" rx="70" ry="12" fill="#4a3410"/>
+  <!-- green felt base inside dome -->
+  <ellipse cx="130" cy="205" rx="66" ry="20" fill="url(#domeBase)"/>
+  <!-- dice inside (simple flat icons) -->
+  <g transform="translate(88,168) rotate(-8)">
+    <rect width="42" height="42" rx="10" fill="#fff" stroke="#ccc" stroke-width="2"/>
+    <circle cx="12" cy="12" r="4" fill="#e0342a"/>
+    <circle cx="30" cy="12" r="4" fill="#222"/>
+    <circle cx="12" cy="30" r="4" fill="#222"/>
+    <circle cx="30" cy="30" r="4" fill="#222"/>
+  </g>
+  <g transform="translate(120,178) rotate(6)">
+    <rect width="42" height="42" rx="10" fill="#fff" stroke="#ccc" stroke-width="2"/>
+    <circle cx="21" cy="21" r="4" fill="#e0342a"/>
+  </g>
+  <g transform="translate(150,165) rotate(14)">
+    <rect width="42" height="42" rx="10" fill="#fff" stroke="#ccc" stroke-width="2"/>
+    <circle cx="12" cy="12" r="4" fill="#222"/>
+    <circle cx="30" cy="12" r="4" fill="#222"/>
+    <circle cx="12" cy="21" r="4" fill="#222"/>
+    <circle cx="30" cy="21" r="4" fill="#222"/>
+    <circle cx="12" cy="30" r="4" fill="#222"/>
+    <circle cx="30" cy="30" r="4" fill="#222"/>
+  </g>
+  <!-- glass dome -->
+  <path d="M 60 205 C 55 110, 80 40, 130 40 C 180 40, 205 110, 200 205 Z"
+        fill="url(#domeGlass)" stroke="#ffffff" stroke-width="2" stroke-opacity="0.6"/>
+  <ellipse cx="130" cy="205" rx="70" ry="16" fill="none" stroke="#c9a24b" stroke-width="6"/>
+  <!-- glass shine -->
+  <path d="M 85 90 C 95 65, 115 55, 128 55" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.5"/>
+</svg>

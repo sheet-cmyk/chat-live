@@ -1,0 +1,29 @@
+<svg viewBox="0 0 1080 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="tableTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0e5c46"/>
+      <stop offset="100%" stop-color="#0a3a2c"/>
+    </linearGradient>
+    <linearGradient id="woodRail" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e0a94a"/>
+      <stop offset="50%" stop-color="#b97b2b"/>
+      <stop offset="100%" stop-color="#7a4f16"/>
+    </linearGradient>
+    <linearGradient id="topBar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f6b52"/>
+      <stop offset="100%" stop-color="#0a4a3a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1080" height="900" fill="url(#tableTop)"/>
+  <rect x="0" y="0" width="1080" height="80" fill="url(#topBar)"/>
+  <rect x="0" y="70" width="1080" height="16" fill="url(#woodRail)"/>
+  <!-- bottom rail for chip selector -->
+  <rect x="0" y="820" width="1080" height="80" fill="url(#woodRail)"/>
+  <!-- suit watermark row -->
+  <g fill="#0a4a3a" opacity="0.5" font-family="Arial" font-size="34">
+    <text x="420" y="875">♠</text>
+    <text x="480" y="875">♥</text>
+    <text x="540" y="875">♣</text>
+    <text x="600" y="875">♦</text>
+  </g>
+</svg>

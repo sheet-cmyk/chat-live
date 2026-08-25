@@ -1,0 +1,16 @@
+<svg viewBox="0 0 400 220" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="panelFelt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2f8f6e"/>
+      <stop offset="55%" stop-color="#1c6b4f"/>
+      <stop offset="100%" stop-color="#0e4a35"/>
+    </linearGradient>
+    <linearGradient id="panelFooter" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1f7a5a"/>
+      <stop offset="100%" stop-color="#0c3f2d"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="392" height="212" rx="24" fill="url(#panelFelt)" stroke="#8fd9bd" stroke-width="2" stroke-opacity="0.6"/>
+  <rect x="4" y="160" width="392" height="56" rx="24" fill="url(#panelFooter)"/>
+  <rect x="4" y="160" width="392" height="10" fill="#0c3f2d"/>
+</svg>

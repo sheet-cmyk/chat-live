@@ -1,0 +1,34 @@
+<svg viewBox="0 0 260 260" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cupBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4a4a4a"/>
+      <stop offset="45%" stop-color="#1c1c1c"/>
+      <stop offset="100%" stop-color="#050505"/>
+    </linearGradient>
+    <radialGradient id="cupHighlight" cx="30%" cy="20%" r="60%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="cupShadow" x="-30%" y="-10%" width="160%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <!-- base ring -->
+  <ellipse cx="130" cy="230" rx="70" ry="14" fill="#2a2a2a" filter="url(#cupShadow)"/>
+  <!-- bell body -->
+  <path d="M 60 220
+           C 55 150, 70 60, 130 30
+           C 190 60, 205 150, 200 220
+           Z"
+        fill="url(#cupBody)" stroke="#000" stroke-width="2"/>
+  <path d="M 60 220
+           C 55 150, 70 60, 130 30
+           C 190 60, 205 150, 200 220
+           Z"
+        fill="url(#cupHighlight)"/>
+  <!-- knob top -->
+  <rect x="112" y="6" width="36" height="30" rx="8" fill="#2a2a2a"/>
+  <ellipse cx="130" cy="8" rx="20" ry="8" fill="#3a3a3a"/>
+  <!-- rim -->
+  <ellipse cx="130" cy="220" rx="72" ry="16" fill="none" stroke="#c9a24b" stroke-width="6"/>
+</svg>

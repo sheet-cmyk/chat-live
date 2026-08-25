@@ -126,3 +126,7 @@ flutter:
     - assets/sweet_bonanza/images/symbols/
     - assets/sweet_bonanza/sound/
     - assets/sweet_bonanza/icons/
+    - assets/game-assets/
+    - assets/game-assets/dice/
+    - assets/game-assets/chips/
+    - assets/game-assets/ui/

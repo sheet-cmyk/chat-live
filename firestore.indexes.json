@@ -4,9 +4,28 @@
       "collectionGroup": "rooms",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "isLive", "order": "ASCENDING" },
+        { "fieldPath": "isLive",      "order": "ASCENDING"  },
         { "fieldPath": "onlineCount", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
+        { "fieldPath": "__name__",    "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "rooms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isLive",      "order": "ASCENDING"  },
+        { "fieldPath": "type",        "order": "ASCENDING"  },
+        { "fieldPath": "onlineCount", "order": "DESCENDING" },
+        { "fieldPath": "__name__",    "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "rooms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isLive",     "order": "ASCENDING"  },
+        { "fieldPath": "createdAt",  "order": "DESCENDING" },
+        { "fieldPath": "__name__",   "order": "DESCENDING" }
       ]
     },
     {
@@ -14,9 +33,17 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "isLive", "order": "ASCENDING" },
-        { "fieldPath": "type", "order": "ASCENDING" },
-        { "fieldPath": "onlineCount", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
+        { "fieldPath": "name",   "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "rooms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "hostUid", "order": "ASCENDING" },
+        { "fieldPath": "isLive",  "order": "ASCENDING" },
+        { "fieldPath": "__name__","order": "ASCENDING" }
       ]
     },
     {
@@ -24,8 +51,44 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "participantIds", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "lastMessageAt", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
+        { "fieldPath": "lastMessageAt",  "order": "DESCENDING"     },
+        { "fieldPath": "__name__",       "order": "DESCENDING"     }
+      ]
+    },
+    {
+      "collectionGroup": "groups",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberIds",     "arrayConfig": "CONTAINS" },
+        { "fieldPath": "lastMessageAt", "order": "DESCENDING"     },
+        { "fieldPath": "__name__",      "order": "DESCENDING"     }
+      ]
+    },
+    {
+      "collectionGroup": "friends",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "participants", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "status",       "order": "ASCENDING"      },
+        { "fieldPath": "__name__",     "order": "ASCENDING"      }
+      ]
+    },
+    {
+      "collectionGroup": "friends",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "receiverId", "order": "ASCENDING" },
+        { "fieldPath": "status",     "order": "ASCENDING" },
+        { "fieldPath": "__name__",   "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId",    "order": "ASCENDING"  },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__",  "order": "DESCENDING" }
       ]
     }
   ],

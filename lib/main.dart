@@ -1,3 +1,4 @@
+import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,7 +21,16 @@ void main() async {
   );
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+
+  // Flutter framework errors (widget warnings, assertion failures) → non-fatal
+  FlutterError.onError = (errorDetails) {
+    FirebaseCrashlytics.instance.recordFlutterError(errorDetails, fatal: false);
+  };
+  // Truly uncaught Dart errors (null deref, stack overflow, etc.) → fatal
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,

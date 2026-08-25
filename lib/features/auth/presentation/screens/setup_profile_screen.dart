@@ -95,11 +95,13 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen>
   }
 
   // ── رفع الصورة إلى Storage ─────────────────────────────────────────────────
-  Future<String?> _uploadAvatar(String uid) async {
-    if (_avatarFile == null) return null;
-    final ref = FirebaseStorage.instance.ref('avatars/$uid.jpg');
-    await ref.putFile(_avatarFile!);
-    return ref.getDownloadURL();
+  // Uses putData(bytes) — more reliable than putFile on Android 10+ scoped storage.
+  // Same path convention as profile_screen: users/{uid}/avatar.jpg
+  Future<String> _uploadAvatar(String uid) async {
+    final bytes = await _avatarFile!.readAsBytes();
+    final storageRef = FirebaseStorage.instance.ref('users/$uid/avatar.jpg');
+    await storageRef.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+    return storageRef.getDownloadURL();
   }
 
   // ── حفظ الملف الشخصي ───────────────────────────────────────────────────────
@@ -116,28 +118,33 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen>
       final firebaseUser = FirebaseAuth.instance.currentUser;
       if (firebaseUser == null) {
         _toast('انتهت الجلسة، سجّل الدخول مجدداً');
+        setState(() => _saving = false);
         return;
       }
 
-      // رفع الصورة — لا يوقف العملية إذا فشل
+      // رفع الصورة — مطلوب، نوقف في حال الفشل
       String? avatarUrl;
       try {
         avatarUrl = await _uploadAvatar(firebaseUser.uid);
-      } catch (_) {
-        // الصورة اختيارية في حال فشل الرفع — نكمل الحفظ
+      } catch (e) {
+        // Show a dialog so the user clearly sees the failure and can retry
+        if (!mounted) return;
+        setState(() => _saving = false);
+        await _showUploadErrorDialog(e.toString());
+        return;
       }
 
       final user = UserModel(
         uid:         firebaseUser.uid,
         displayName: nick,
-        avatar:      avatarUrl ?? firebaseUser.photoURL,
+        avatar:      avatarUrl,
         gender:      _gender,
         country:     _country,
         phoneNumber: firebaseUser.phoneNumber ?? '',
         createdAt:   DateTime.now(),
       );
 
-      // حفظ المستخدم في Firestore أولاً (الأهم)
+      // حفظ المستخدم في Firestore
       await ref.read(authRepositoryProvider).saveNewUser(user);
 
       // حفظ لون الاسم
@@ -150,14 +157,6 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen>
       await WalletRepository().ensureWelcomeBonus(firebaseUser.uid);
 
       if (!mounted) return;
-
-      // إذا فشل رفع الصورة نُعلم المستخدم لكن نكمل
-      if (avatarUrl == null && _avatarFile != null) {
-        _toast('تم الحفظ — فشل رفع الصورة، تحقق من إعدادات Firebase Storage');
-        await Future.delayed(const Duration(seconds: 2));
-      }
-
-      if (!mounted) return;
       await _showWelcomeDialog();
       if (!mounted) return;
       context.go(AppRoutes.home);
@@ -166,6 +165,50 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen>
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _showUploadErrorDialog(String error) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Text('⚠️', style: TextStyle(fontSize: 22)),
+          SizedBox(width: 8),
+          Text('فشل رفع الصورة',
+              style: TextStyle(fontFamily: 'Cairo', color: Colors.white,
+                  fontSize: 16, fontWeight: FontWeight.w700)),
+        ]),
+        content: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text(
+                'تعذّر رفع الصورة إلى Firebase Storage.\n\nتأكد من:',
+                textAlign: TextAlign.right,
+                style: TextStyle(fontFamily: 'Cairo', color: Color(0xFFB0B0C8),
+                    fontSize: 13, height: 1.6),
+              ),
+              const SizedBox(height: 8),
+              const Text('• قواعد Storage تسمح بالكتابة\n• اتصالك بالإنترنت يعمل',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontFamily: 'Cairo', color: Color(0xFFB0B0C8), fontSize: 12)),
+              const SizedBox(height: 10),
+              Text(error.length > 120 ? error.substring(0, 120) : error,
+                  style: const TextStyle(
+                      fontFamily: 'monospace', fontSize: 10, color: Colors.red)),
+            ]),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('حسناً — أحاول مجدداً',
+                style: TextStyle(fontFamily: 'Cairo', color: Color(0xFF9C4DCC),
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showWelcomeDialog() async {
@@ -686,11 +729,10 @@ class _ImageSourceSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1A2E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+    return Material(
+      color: const Color(0xFF1A1A2E),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      clipBehavior: Clip.antiAlias,
       child: SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const SizedBox(height: 8),

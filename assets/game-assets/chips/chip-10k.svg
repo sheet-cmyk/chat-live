@@ -1,0 +1,19 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="c10kbody" cx="35%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="#ff8f80"/>
+      <stop offset="60%" stop-color="#e0342a"/>
+      <stop offset="100%" stop-color="#920f0a"/>
+    </radialGradient>
+    <filter id="c10kshadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+  <circle cx="100" cy="100" r="94" fill="#ffffff" filter="url(#c10kshadow)"/>
+  <circle cx="100" cy="100" r="94" fill="url(#c10kbody)"/>
+  <circle cx="100" cy="100" r="94" fill="none" stroke="#ffffff" stroke-width="8" stroke-dasharray="14 10"/>
+  <circle cx="100" cy="100" r="74" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.8"/>
+  <circle cx="100" cy="100" r="62" fill="#e84a3f" stroke="#ffffff" stroke-width="4"/>
+  <text x="100" y="113" font-family="Arial, sans-serif" font-weight="900" font-size="30"
+        fill="#ffffff" text-anchor="middle" stroke="#920f0a" stroke-width="2" paint-order="stroke">10K</text>
+</svg>

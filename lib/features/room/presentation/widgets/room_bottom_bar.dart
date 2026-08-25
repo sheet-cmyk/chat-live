@@ -8,6 +8,7 @@ import '../providers/room_provider.dart';
 import '../../../../core/services/zego_service.dart';
 import 'voice_effects_sheet.dart';
 import '../../../game/presentation/screens/greedy_star_screen.dart';
+import '../../../games/dice_game/providers/dice_game_providers.dart';
 
 class RoomBottomBar extends ConsumerStatefulWidget {
   const RoomBottomBar({
@@ -81,7 +82,11 @@ class _RoomBottomBarState extends ConsumerState<RoomBottomBar> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => _RoomGamesSheet(parentContext: context),
+      builder: (_) => _RoomGamesSheet(
+        parentContext: context,
+        roomId:        widget.roomId,
+        ref:           ref,
+      ),
     );
   }
 
@@ -533,8 +538,14 @@ class _ActionBtn extends StatelessWidget {
 //  لوحة الألعاب داخل الغرفة
 // ═══════════════════════════════════════════════════════════════════════
 class _RoomGamesSheet extends StatelessWidget {
-  const _RoomGamesSheet({required this.parentContext});
+  const _RoomGamesSheet({
+    required this.parentContext,
+    required this.roomId,
+    required this.ref,
+  });
   final BuildContext parentContext;
+  final String       roomId;
+  final WidgetRef    ref;
 
   @override
   Widget build(BuildContext context) {
@@ -575,6 +586,20 @@ class _RoomGamesSheet extends StatelessWidget {
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.push(parentContext, MaterialPageRoute(builder: (_) => const GreedyStarScreen()));
+                  },
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: _GameTile(
+                  emoji: '🎲',
+                  title: 'لعبة النرد',
+                  subtitle: 'صغير • كبير • ثلاثية',
+                  gradient: const [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+                  onTap: () {
+                    Navigator.pop(context);
+                    ref.read(diceGameRoomIdProvider.notifier).state = roomId;
+                    ref.read(diceGameVisibleProvider.notifier).state = true;
                   },
                 ),
               ),
