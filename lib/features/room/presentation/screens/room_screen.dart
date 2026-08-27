@@ -1004,7 +1004,7 @@ class _DiceGameOverlay extends ConsumerWidget {
     return Positioned(
       left: 0, right: 0,
       bottom: navBarHeight,           // فوق أزرار الهاتف مباشرةً
-      height: screenHeight * 0.56,
+      height: screenHeight * 0.65,
       child: DiceGamePanel(
         roomId: roomId,
         onClose: () {

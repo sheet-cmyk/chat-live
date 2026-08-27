@@ -45,11 +45,11 @@ final diceCountdownProvider = StateNotifierProvider.family<_CountdownNotifier, i
   (ref, roomId) => _CountdownNotifier(ref, roomId),
 );
 
-const _rollingMs = 3000;  // how long the rolling animation plays (ms)
-const _resultMs  = 5000;  // how long the result screen is shown (ms)
+const _rollingMs = 3000;
+const _resultMs  = 3000;
 
 class _CountdownNotifier extends StateNotifier<int> {
-  _CountdownNotifier(this._ref, this._roomId) : super(20) {
+  _CountdownNotifier(this._ref, this._roomId) : super(16) {
     _sub = _ref.listen(
       diceRoundProvider(_roomId),
       (_, next) => _onRound(next.valueOrNull),

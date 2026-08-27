@@ -91,11 +91,9 @@ class DiceRound {
   });
 
   int secsRemaining() {
-    // Derive end-time from bettingStartedAt (server timestamp) so every device
-    // counts the same seconds regardless of local clock drift.
-    final endsAt = bettingStartedAt.add(const Duration(seconds: 20));
+    final endsAt = bettingStartedAt.add(const Duration(seconds: 16));
     final rem    = endsAt.difference(DateTime.now()).inSeconds;
-    return rem.clamp(0, 20);
+    return rem.clamp(0, 16);
   }
 
   factory DiceRound.fromMap(String roomId, Map<String, dynamic> d) {

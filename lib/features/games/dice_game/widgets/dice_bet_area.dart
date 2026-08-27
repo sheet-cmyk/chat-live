@@ -11,7 +11,6 @@ class DiceBetArea extends StatelessWidget {
     required this.canBet,
     required this.isWinner,
     required this.onTap,
-    this.isRolling = false,
   });
 
   final DiceBetType  type;
@@ -20,7 +19,6 @@ class DiceBetArea extends StatelessWidget {
   final bool         canBet;
   final bool         isWinner;
   final VoidCallback onTap;
-  final bool         isRolling;
 
   @override
   Widget build(BuildContext context) {
@@ -130,18 +128,6 @@ class DiceBetArea extends StatelessWidget {
                         style: TextStyle(
                           color: Colors.white.withAlpha(110),
                           fontSize: 8,
-                          fontFamily: 'Cairo',
-                        ),
-                      ),
-
-                    // Rolling notice
-                    if (isRolling)
-                      const Text(
-                        'النتيجة قريباً',
-                        style: TextStyle(
-                          color: Color(0xFFFFD700),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
                           fontFamily: 'Cairo',
                         ),
                       ),

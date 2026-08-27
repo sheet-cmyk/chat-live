@@ -4,9 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/dice_game_models.dart';
 
 class DiceGameRepository {
-  static const int _bettingSeconds = 20;
-  static const int _rollingSeconds = 3;  // rolling phase visible duration
-  static const int _resultSeconds  = 5;  // winner display duration
+  static const int _bettingSeconds = 16;
+  static const int _rollingSeconds = 3;
+  static const int _resultSeconds  = 3;
 
   final _db   = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
