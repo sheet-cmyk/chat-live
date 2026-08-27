@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/routes.dart';
 import '../providers/auth_provider.dart';
+import '../../../gift/presentation/widgets/gift_panel.dart';
 import '../../../wallet/presentation/providers/wallet_provider.dart';
 import '../../../levels/presentation/providers/level_provider.dart';
 import '../../../admin/presentation/providers/admin_provider.dart';
@@ -445,6 +446,8 @@ class _SupportLevelCard extends StatelessWidget {
 
 // ── Social Stats (متابعين / معجبين / زوار) ───────────────────────────────────
 
+// ── Social Stats (متابَعون / معجبون / زوار) ──────────────────────────────────
+
 class _SocialStats extends StatelessWidget {
   const _SocialStats({required this.uid, required this.profile});
   final String uid;
@@ -459,7 +462,7 @@ class _SocialStats extends StatelessWidget {
   void _showList(BuildContext context, String collection, String title) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: AppColors.background,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -473,39 +476,39 @@ class _SocialStats extends StatelessWidget {
     final followers = (profile['followersCount'] as num?)?.toInt() ?? 0;
     final visitors  = (profile['visitorsCount']  as num?)?.toInt() ?? 0;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: IntrinsicHeight(
-        child: Row(children: [
-          _statCell(_fmt(following), 'متابَعون', () => _showList(context, 'following', 'المتابَعون')),
-          const VerticalDivider(color: AppColors.divider, width: 1),
-          _statCell(_fmt(followers), 'معجبون', () => _showList(context, 'followers', 'المعجبون')),
-          const VerticalDivider(color: AppColors.divider, width: 1),
-          _statCell(_fmt(visitors), 'زوار', () => _showList(context, 'visitors', 'الزوار')),
-        ]),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(children: [
+        _card(_fmt(following), 'متابَعون',
+            () => _showList(context, 'following', 'المتابَعون')),
+        const SizedBox(width: 10),
+        _card(_fmt(followers), 'معجبون',
+            () => _showList(context, 'followers', 'المعجبون')),
+        const SizedBox(width: 10),
+        _card(_fmt(visitors), 'زوار',
+            () => _showList(context, 'visitors', 'الزوار')),
+      ]),
     );
   }
 
-  Widget _statCell(String value, String label, VoidCallback onTap) {
+  Widget _card(String value, String label, VoidCallback onTap) {
     return Expanded(
-      child: InkWell(
+      child: GestureDetector(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
+        child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.divider),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(value, style: const TextStyle(
                   color: AppColors.textPrimary, fontFamily: 'Cairo',
                   fontSize: 16, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               Text(label, style: const TextStyle(
                   color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 11)),
             ],
@@ -519,7 +522,8 @@ class _SocialStats extends StatelessWidget {
 // ── User List Sheet ───────────────────────────────────────────────────────────
 
 class _UserListSheet extends StatelessWidget {
-  const _UserListSheet({required this.uid, required this.collection, required this.title});
+  const _UserListSheet(
+      {required this.uid, required this.collection, required this.title});
   final String uid, collection, title;
 
   @override
@@ -529,60 +533,392 @@ class _UserListSheet extends StatelessWidget {
       minChildSize: 0.35,
       maxChildSize: 0.9,
       expand: false,
-      builder: (_, ctrl) => Column(children: [
-        const SizedBox(height: 10),
-        Center(child: Container(
-            width: 36, height: 4,
-            decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)))),
-        const SizedBox(height: 12),
-        Text(title, style: const TextStyle(
-            color: AppColors.textPrimary, fontFamily: 'Cairo',
-            fontSize: 15, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        const Divider(color: AppColors.divider, height: 1),
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('users').doc(uid)
-                .collection(collection)
-                .orderBy('addedAt', descending: true)
-                .limit(50).snapshots(),
-            builder: (ctx, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final docs = snap.data?.docs ?? [];
-              if (docs.isEmpty) {
-                return const Center(child: Text('لا يوجد بيانات بعد',
-                    style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo')));
-              }
-              return ListView.builder(
-                controller: ctrl,
-                itemCount: docs.length,
-                itemBuilder: (_, i) {
-                  final d = docs[i].data() as Map<String, dynamic>;
-                  final name = d['displayName'] as String? ?? d['name'] as String? ?? 'مستخدم';
-                  final avatar = d['avatar'] as String?;
-                  return ListTile(
-                    leading: CircleAvatar(
-                      radius: 20,
-                      backgroundColor: AppColors.surfaceLight,
-                      backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-                      child: avatar == null
-                          ? Text(name.isNotEmpty ? name[0] : '؟',
-                              style: const TextStyle(color: Colors.white, fontFamily: 'Cairo'))
-                          : null,
-                    ),
-                    title: Text(name, style: const TextStyle(
-                        color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 13)),
-                  );
-                },
-              );
-            },
-          ),
+      builder: (_, ctrl) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-      ]),
+        child: Column(children: [
+          const SizedBox(height: 10),
+          Center(child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                  color: AppColors.divider,
+                  borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 12),
+          Text(title, style: const TextStyle(
+              color: AppColors.textPrimary, fontFamily: 'Cairo',
+              fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          const Divider(color: AppColors.divider, height: 1),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users').doc(uid)
+                  .collection(collection)
+                  .orderBy('addedAt', descending: true)
+                  .limit(50).snapshots(),
+              builder: (ctx, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final docs = snap.data?.docs ?? [];
+                if (docs.isEmpty) {
+                  return const Center(child: Text('لا يوجد بيانات بعد',
+                      style: TextStyle(
+                          color: AppColors.textHint, fontFamily: 'Cairo')));
+                }
+                return ListView.builder(
+                  controller: ctrl,
+                  itemCount: docs.length,
+                  itemBuilder: (_, i) {
+                    final docId = docs[i].id;
+                    final d = docs[i].data() as Map<String, dynamic>;
+                    final name = d['displayName'] as String? ??
+                        d['name'] as String? ?? 'مستخدم';
+                    final avatar = d['avatar'] as String?;
+                    return ListTile(
+                      onTap: () => showModalBottomSheet(
+                        context: context,
+                        backgroundColor: Colors.transparent,
+                        isScrollControlled: true,
+                        builder: (_) =>
+                            _OtherUserProfileSheet(targetUid: docId),
+                      ),
+                      leading: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: AppColors.surfaceLight,
+                        backgroundImage:
+                            avatar != null ? NetworkImage(avatar) : null,
+                        child: avatar == null
+                            ? Text(name.isNotEmpty ? name[0] : '؟',
+                                style: const TextStyle(
+                                    color: Colors.white, fontFamily: 'Cairo'))
+                            : null,
+                      ),
+                      title: Text(name, style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontFamily: 'Cairo',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                      trailing: const Icon(
+                          Icons.chevron_left_rounded,
+                          color: AppColors.textHint, size: 18),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ]),
+      ),
     );
   }
+}
+
+// ── Other User Profile Sheet ──────────────────────────────────────────────────
+
+class _OtherUserProfileSheet extends ConsumerStatefulWidget {
+  const _OtherUserProfileSheet({required this.targetUid});
+  final String targetUid;
+
+  @override
+  ConsumerState<_OtherUserProfileSheet> createState() =>
+      _OtherUserProfileSheetState();
+}
+
+class _OtherUserProfileSheetState
+    extends ConsumerState<_OtherUserProfileSheet> {
+  Map<String, dynamic>? _data;
+  bool _isFollowing = false;
+  bool _loadingFollow = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null) return;
+
+    final db = FirebaseFirestore.instance;
+
+    // جلب بيانات المستخدم المستهدف
+    final userDoc = await db.collection('users').doc(widget.targetUid).get();
+    final data = userDoc.data() ?? {};
+
+    // هل أنا أتابعه؟
+    final followDoc = await db
+        .collection('users').doc(widget.targetUid)
+        .collection('followers').doc(me.uid).get();
+
+    // تسجيل الزيارة (أول زيارة فقط تزيد العداد)
+    final myProfile = ref.read(userProfileStreamProvider).valueOrNull;
+    final visitorRef = db
+        .collection('users').doc(widget.targetUid)
+        .collection('visitors').doc(me.uid);
+    final visitorDoc = await visitorRef.get();
+    final isFirstVisit = !visitorDoc.exists;
+
+    final batch = db.batch();
+    batch.set(visitorRef, {
+      'displayName': myProfile?['displayName'] ?? me.displayName ?? 'مستخدم',
+      'avatar': myProfile?['avatar'] ?? me.photoURL,
+      'addedAt': FieldValue.serverTimestamp(),
+    });
+    if (isFirstVisit) {
+      batch.update(
+        db.collection('users').doc(widget.targetUid),
+        {'visitorsCount': FieldValue.increment(1)},
+      );
+    }
+    await batch.commit();
+
+    if (mounted) {
+      setState(() {
+        _data = data;
+        _isFollowing = followDoc.exists;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null) return;
+    setState(() => _loadingFollow = true);
+
+    final db = FirebaseFirestore.instance;
+    final myProfile = ref.read(userProfileStreamProvider).valueOrNull;
+    final batch = db.batch();
+
+    if (_isFollowing) {
+      batch.delete(db.collection('users').doc(widget.targetUid)
+          .collection('followers').doc(me.uid));
+      batch.delete(db.collection('users').doc(me.uid)
+          .collection('following').doc(widget.targetUid));
+      batch.update(db.collection('users').doc(widget.targetUid),
+          {'followersCount': FieldValue.increment(-1)});
+      batch.update(db.collection('users').doc(me.uid),
+          {'followingCount': FieldValue.increment(-1)});
+    } else {
+      batch.set(
+        db.collection('users').doc(widget.targetUid)
+            .collection('followers').doc(me.uid),
+        {
+          'displayName': myProfile?['displayName'] ?? me.displayName ?? 'مستخدم',
+          'avatar': myProfile?['avatar'] ?? me.photoURL,
+          'addedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      batch.set(
+        db.collection('users').doc(me.uid)
+            .collection('following').doc(widget.targetUid),
+        {
+          'displayName': _data?['displayName'] ?? 'مستخدم',
+          'avatar': _data?['avatar'],
+          'addedAt': FieldValue.serverTimestamp(),
+        },
+      );
+      batch.update(db.collection('users').doc(widget.targetUid),
+          {'followersCount': FieldValue.increment(1)});
+      batch.update(db.collection('users').doc(me.uid),
+          {'followingCount': FieldValue.increment(1)});
+    }
+
+    await batch.commit();
+    if (mounted) {
+      setState(() {
+        _isFollowing = !_isFollowing;
+        _loadingFollow = false;
+      });
+    }
+  }
+
+  void _openGift(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => GiftPanel(
+        targetUserId: widget.targetUid,
+        targetUserName: _data?['displayName'] as String?,
+        targetUserAvatar: _data?['avatar'] as String?,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return Container(
+        height: 220,
+        decoration: const BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: const Center(
+            child: CircularProgressIndicator(color: AppColors.primary)),
+      );
+    }
+
+    final data = _data ?? {};
+    final name    = data['displayName'] as String? ?? 'مستخدم';
+    final avatar  = data['avatar']      as String?;
+    final gender  = data['gender']      as String?;
+    final country = data['country']     as String?;
+    final followers = (data['followersCount'] as num?)?.toInt() ?? 0;
+    final following = (data['followingCount'] as num?)?.toInt() ?? 0;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+          20, 14, 20, MediaQuery.of(context).padding.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle
+          Center(child: Container(
+              width: 38, height: 4,
+              decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2)))),
+          const SizedBox(height: 20),
+
+          // Avatar
+          CircleAvatar(
+            radius: 46,
+            backgroundColor: AppColors.primary,
+            backgroundImage:
+                avatar != null ? CachedNetworkImageProvider(avatar) : null,
+            child: avatar == null
+                ? Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '؟',
+                    style: const TextStyle(
+                        fontSize: 34, color: Colors.white,
+                        fontWeight: FontWeight.bold))
+                : null,
+          ),
+          const SizedBox(height: 12),
+
+          // Name
+          Text(name, style: const TextStyle(
+              color: AppColors.textPrimary, fontFamily: 'Cairo',
+              fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+
+          // Gender + Country badges
+          if (gender != null || country != null)
+            Wrap(spacing: 8, children: [
+              if (gender != null)
+                _badge(
+                  gender == 'female' ? '♀ أنثى' : '♂ ذكر',
+                  gender == 'female'
+                      ? const Color(0xFFF48FB1)
+                      : const Color(0xFF90CAF9),
+                ),
+              if (country != null) _badge(country, AppColors.primary),
+            ]),
+          const SizedBox(height: 16),
+
+          // Stats row
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            _statItem(_fmt(followers), 'معجبون'),
+            Container(width: 1, height: 30,
+                color: AppColors.divider, margin: const EdgeInsets.symmetric(horizontal: 20)),
+            _statItem(_fmt(following), 'متابَعون'),
+          ]),
+          const SizedBox(height: 20),
+
+          // Action buttons
+          Row(children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isFollowing
+                      ? AppColors.surfaceLight
+                      : AppColors.primary,
+                  foregroundColor:
+                      _isFollowing ? AppColors.textPrimary : Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                ),
+                onPressed: _loadingFollow ? null : _toggleFollow,
+                icon: _loadingFollow
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(
+                        _isFollowing
+                            ? Icons.person_remove_rounded
+                            : Icons.person_add_rounded,
+                        size: 18),
+                label: Text(
+                  _isFollowing ? 'إلغاء المتابعة' : 'متابعة',
+                  style: const TextStyle(
+                      fontFamily: 'Cairo',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.gold,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 22, vertical: 13),
+              ),
+              onPressed: () => _openGift(context),
+              child: const Text('🎁', style: TextStyle(fontSize: 20)),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(0)}K';
+    return '$n';
+  }
+
+  Widget _badge(String text, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withAlpha(25),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: color.withAlpha(80)),
+    ),
+    child: Text(text,
+        style: TextStyle(
+            color: color,
+            fontFamily: 'Cairo',
+            fontSize: 12,
+            fontWeight: FontWeight.w600)),
+  );
+
+  Widget _statItem(String value, String label) => Column(
+    children: [
+      Text(value, style: const TextStyle(
+          color: AppColors.textPrimary, fontFamily: 'Cairo',
+          fontSize: 17, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 2),
+      Text(label, style: const TextStyle(
+          color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 12)),
+    ],
+  );
 }
 
