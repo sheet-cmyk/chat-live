@@ -1,27 +1,174 @@
+﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/chat_colors.dart';
 import '../../../../app/routes.dart';
 import '../../../../core/localization/locale_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
-class SettingsScreen extends ConsumerWidget {
+// ── Countries list ────────────────────────────────────────────────────────────
+const _kCountries = [
+  ('🇸🇦', 'السعودية'),  ('🇮🇶', 'العراق'),    ('🇦🇪', 'الإمارات'),
+  ('🇰🇼', 'الكويت'),   ('🇶🇦', 'قطر'),        ('🇧🇭', 'البحرين'),
+  ('🇴🇲', 'عُمان'),    ('🇾🇪', 'اليمن'),       ('🇯🇴', 'الأردن'),
+  ('🇸🇾', 'سوريا'),    ('🇱🇧', 'لبنان'),       ('🇵🇸', 'فلسطين'),
+  ('🇪🇬', 'مصر'),      ('🇱🇾', 'ليبيا'),        ('🇹🇳', 'تونس'),
+  ('🇩🇿', 'الجزائر'),  ('🇲🇦', 'المغرب'),       ('🇸🇩', 'السودان'),
+  ('🇹🇷', 'تركيا'),    ('🇮🇷', 'إيران'),         ('🇵🇰', 'باكستان'),
+  ('🇮🇳', 'الهند'),    ('🇬🇧', 'بريطانيا'),     ('🇺🇸', 'أمريكا'),
+  ('🇩🇪', 'ألمانيا'),  ('🇫🇷', 'فرنسا'),        ('🇸🇪', 'السويد'),
+  ('🇨🇦', 'كندا'),     ('🇦🇺', 'أستراليا'),
+];
+
+// ── Unified Profile Screen ────────────────────────────────────────────────────
+
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final locale = ref.watch(localeProvider);
-    final isArabic = locale.languageCode == 'ar';
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  final _nameCtrl = TextEditingController();
+  bool _loading = false;
+  bool _initialized = false;
+  String? _nameColorHex;
+  String? _textColorHex;
+  String? _country;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  void _initFromProfile(Map<String, dynamic> profile) {
+    if (_initialized) return;
+    _initialized = true;
+    _nameCtrl.text = profile['displayName'] as String? ?? '';
+    _nameColorHex = profile['nameColor'] as String?;
+    _textColorHex = profile['textColor'] as String?;
+    _country      = profile['country']   as String?;
+  }
+
+  Future<void> _pickCountry(Map<String, dynamic> profile) async {
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _CountrySheet(
+        selected: _country,
+        onSelect: (c) => Navigator.pop(context, c),
+      ),
+    );
+    if (result != null && mounted) setState(() => _country = result);
+  }
+
+  Future<void> _save(String uid, Map<String, dynamic> profile) async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      final updates = <String, dynamic>{};
+
+      if (name != (profile['displayName'] ?? '')) {
+        updates['displayName'] = name;
+        await FirebaseAuth.instance.currentUser?.updateDisplayName(name);
+      }
+      if (_nameColorHex != null) updates['nameColor'] = _nameColorHex;
+      if (_textColorHex != null) updates['textColor'] = _textColorHex;
+      if (_country != null)      updates['country']   = _country;
+
+      if (updates.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .set(updates, SetOptions(merge: true));
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('تم الحفظ ✅', style: TextStyle(fontFamily: 'Cairo')),
+          backgroundColor: Colors.black87,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')),
+          backgroundColor: Colors.red.shade800,
+        ));
+        return;
+      }
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  void _showSheet(BuildContext context, Widget sheet) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => sheet,
+    );
+  }
+
+  void _showTextPage(BuildContext context, String title, String content) {
+    Navigator.push(context,
+        MaterialPageRoute(builder: (_) => _TextPage(title: title, content: content)));
+  }
+
+  void _confirmLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('تسجيل الخروج',
+            style: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo')),
+        content: const Text('هل تريد تسجيل الخروج؟',
+            style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo'))),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await ref.read(authRepositoryProvider).signOut();
+              if (context.mounted) context.go(AppRoutes.login);
+            },
+            child: const Text('خروج',
+                style: TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final locale      = ref.watch(localeProvider);
+    final isArabic    = locale.languageCode == 'ar';
+    final profileAsync = ref.watch(userProfileStreamProvider);
+    final profile     = profileAsync.valueOrNull ?? {};
+    final uid         = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+    _initFromProfile(profile);
+
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         elevation: 0,
-        title: const Text('الإعدادات', style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+        title: const Text('الملف الشخصي',
+            style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_rounded),
           onPressed: () => Navigator.pop(context),
@@ -29,15 +176,158 @@ class SettingsScreen extends ConsumerWidget {
       ),
       body: ListView(
         children: [
-          const _ProfileInfoCard(),
+          // ── تعديل الملف الشخصي ─────────────────────────────────────
+          _sectionHeader('تعديل الملف الشخصي'),
+
+          // الاسم
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: TextField(
+              controller: _nameCtrl,
+              maxLength: 30,
+              style: const TextStyle(
+                  color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 15),
+              decoration: InputDecoration(
+                labelText: 'الاسم الظاهر',
+                labelStyle: const TextStyle(
+                    color: AppColors.textSecondary, fontFamily: 'Cairo'),
+                prefixIcon:
+                    const Icon(Icons.person_rounded, color: AppColors.primary),
+                filled: true,
+                fillColor: AppColors.surface,
+                counterStyle:
+                    const TextStyle(color: AppColors.textHint, fontSize: 10),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(color: AppColors.primary, width: 2),
+                ),
+              ),
+            ),
+          ),
+
+          // الدولة
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('الدولة',
+                    style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontFamily: 'Cairo',
+                        fontSize: 13)),
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: () => _pickCountry(profile),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _country != null
+                            ? AppColors.primary
+                            : AppColors.divider,
+                        width: _country != null ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(children: [
+                      Text(_country?.split(' ').first ?? '🌍',
+                          style: const TextStyle(fontSize: 22)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _country != null
+                              ? _country!.split(' ').sublist(1).join(' ')
+                              : 'اختر دولتك',
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontFamily: 'Cairo',
+                            fontSize: 15,
+                            color: _country != null
+                                ? AppColors.textPrimary
+                                : AppColors.textHint,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.keyboard_arrow_down_rounded,
+                          color: _country != null
+                              ? AppColors.primary
+                              : AppColors.textHint),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // لون الاسم
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: _ColorPicker(
+              label: 'لون الاسم',
+              selectedHex: _nameColorHex,
+              onSelect: (h) => setState(() => _nameColorHex = h),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // لون الكتابة
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: _ColorPicker(
+              label: 'لون الكتابة',
+              selectedHex: _textColorHex,
+              onSelect: (h) => setState(() => _textColorHex = h),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // زر الحفظ
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: _loading ? null : () => _save(uid, profile),
+                child: _loading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2.5))
+                    : const Text('حفظ ✅',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'Cairo',
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16)),
+              ),
+            ),
+          ),
+
+          // ── الحساب ─────────────────────────────────────────────────
+          const Divider(color: AppColors.divider, height: 1),
           _sectionHeader('الحساب'),
-          _tile(icon: Icons.person_outline_rounded, title: 'تعديل الملف الشخصي', onTap: () {}),
           _tile(
             icon: Icons.lock_outline_rounded,
             title: 'الخصوصية والأمان',
             onTap: () => _showSheet(context, const _PrivacySheet()),
           ),
           _tile(icon: Icons.block_rounded, title: 'قائمة الحظر', onTap: () {}),
+
+          // ── المكافآت ────────────────────────────────────────────────
           const Divider(color: AppColors.divider, height: 1),
           _sectionHeader('المكافآت'),
           _tile(
@@ -45,6 +335,8 @@ class SettingsScreen extends ConsumerWidget {
             title: 'المكافأة اليومية',
             onTap: () => context.push('/daily-reward'),
           ),
+
+          // ── التطبيق ─────────────────────────────────────────────────
           const Divider(color: AppColors.divider, height: 1),
           _sectionHeader('التطبيق'),
           _tile(
@@ -52,7 +344,8 @@ class SettingsScreen extends ConsumerWidget {
             title: 'اللغة',
             trailing: Text(
               isArabic ? 'العربية' : 'English',
-              style: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo'),
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontFamily: 'Cairo'),
             ),
             onTap: () => _showSheet(context, const _LanguageSheet()),
           ),
@@ -61,25 +354,36 @@ class SettingsScreen extends ConsumerWidget {
             title: 'الإشعارات',
             onTap: () => _showSheet(context, const _NotifSheet()),
           ),
-          _tile(icon: Icons.volume_up_outlined, title: 'الصوت والمؤثرات', onTap: () {}),
+          _tile(
+              icon: Icons.volume_up_outlined,
+              title: 'الصوت والمؤثرات',
+              onTap: () {}),
+
+          // ── المعلومات ───────────────────────────────────────────────
           const Divider(color: AppColors.divider, height: 1),
           _sectionHeader('المعلومات'),
           _tile(
             icon: Icons.privacy_tip_outlined,
             title: 'سياسة الخصوصية',
-            onTap: () => _showTextPage(context, 'سياسة الخصوصية', _kPrivacy),
+            onTap: () =>
+                _showTextPage(context, 'سياسة الخصوصية', _kPrivacy),
           ),
           _tile(
             icon: Icons.article_outlined,
             title: 'شروط الاستخدام',
-            onTap: () => _showTextPage(context, 'شروط الاستخدام', _kTerms),
+            onTap: () =>
+                _showTextPage(context, 'شروط الاستخدام', _kTerms),
           ),
           _tile(
             icon: Icons.info_outline_rounded,
             title: 'عن التطبيق',
-            trailing: const Text('1.0.0', style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo')),
+            trailing: const Text('1.0.0',
+                style: TextStyle(
+                    color: AppColors.textSecondary, fontFamily: 'Cairo')),
             onTap: () {},
           ),
+
+          // ── تسجيل الخروج ────────────────────────────────────────────
           const Divider(color: AppColors.divider, height: 1),
           const SizedBox(height: 16),
           Padding(
@@ -89,10 +393,15 @@ class SettingsScreen extends ConsumerWidget {
                 foregroundColor: AppColors.error,
                 side: const BorderSide(color: AppColors.error),
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
-              onPressed: () => _confirmLogout(context, ref),
-              child: const Text('تسجيل الخروج', style: TextStyle(fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.w600)),
+              onPressed: () => _confirmLogout(context),
+              child: const Text('تسجيل الخروج',
+                  style: TextStyle(
+                      fontFamily: 'Cairo',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600)),
             ),
           ),
           const SizedBox(height: 40),
@@ -103,283 +412,239 @@ class SettingsScreen extends ConsumerWidget {
 
   Widget _sectionHeader(String title) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-        child: Text(title, style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700, fontFamily: 'Cairo')),
+        child: Text(title,
+            style: const TextStyle(
+                color: AppColors.primary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Cairo')),
       );
 
-  Widget _tile({required IconData icon, required String title, required VoidCallback onTap, Widget? trailing}) {
+  Widget _tile(
+      {required IconData icon,
+      required String title,
+      required VoidCallback onTap,
+      Widget? trailing}) {
     return ListTile(
       tileColor: AppColors.surface,
       leading: Container(
-        width: 36, height: 36,
-        decoration: BoxDecoration(color: AppColors.surfaceLight, borderRadius: BorderRadius.circular(10)),
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+            color: AppColors.surfaceLight,
+            borderRadius: BorderRadius.circular(10)),
         child: Icon(icon, color: AppColors.primary, size: 20),
       ),
-      title: Text(title, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 14)),
-      trailing: trailing ?? const Icon(Icons.chevron_right_rounded, color: AppColors.textHint, size: 20),
+      title: Text(title,
+          style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontFamily: 'Cairo',
+              fontSize: 14)),
+      trailing: trailing ??
+          const Icon(Icons.chevron_right_rounded,
+              color: AppColors.textHint, size: 20),
       onTap: onTap,
     );
   }
-
-  void _showSheet(BuildContext context, Widget sheet) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => sheet,
-    );
-  }
-
-  void _showTextPage(BuildContext context, String title, String content) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => _TextPage(title: title, content: content)));
-  }
-
-  void _confirmLogout(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('تسجيل الخروج', style: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo')),
-        content: const Text('هل تريد تسجيل الخروج؟', style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo'))),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await ref.read(authRepositoryProvider).signOut();
-              if (context.mounted) context.go(AppRoutes.login);
-            },
-            child: const Text('خروج', style: TextStyle(color: AppColors.error, fontFamily: 'Cairo')),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-// ── بطاقة الملف الشخصي (جنس + دولة + إحصاءات) ───────────────────
-class _ProfileInfoCard extends ConsumerWidget {
-  const _ProfileInfoCard();
+// ── Country Sheet ─────────────────────────────────────────────────────────────
+
+class _CountrySheet extends StatefulWidget {
+  const _CountrySheet({required this.selected, required this.onSelect});
+  final String? selected;
+  final void Function(String) onSelect;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(userProfileStreamProvider).valueOrNull;
-    final gender   = profile?['gender']        as String?;
-    final country  = profile?['country']        as String?;
-    final followers = (profile?['followersCount'] as num?)?.toInt() ?? 0;
-    final following = (profile?['followingCount'] as num?)?.toInt() ?? 0;
-    final visitors  = (profile?['visitorsCount']  as num?)?.toInt() ?? 0;
-
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-
-    if (gender == null && country == null) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // الجنس + الدولة
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              if (gender != null) _badge(
-                icon: gender == 'female' ? '♀' : '♂',
-                label: gender == 'female' ? 'أنثى' : 'ذكر',
-                color: gender == 'female' ? const Color(0xFFFF6B9D) : const Color(0xFF4DABF7),
-              ),
-              if (country != null && country.isNotEmpty)
-                _badge(
-                  icon: country.split(' ').first,
-                  label: country.split(' ').length > 1 ? country.split(' ').sublist(1).join(' ') : country,
-                  color: AppColors.primary,
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // الثلاث أزرار
-          IntrinsicHeight(
-            child: Row(
-              children: [
-                _StatBtn(
-                  count: following,
-                  label: 'متابعين',
-                  onTap: () => _showList(context, uid, 'following', 'المتابَعون'),
-                ),
-                const VerticalDivider(color: AppColors.divider, width: 1),
-                _StatBtn(
-                  count: followers,
-                  label: 'معجبين',
-                  onTap: () => _showList(context, uid, 'followers', 'المعجبون'),
-                ),
-                const VerticalDivider(color: AppColors.divider, width: 1),
-                _StatBtn(
-                  count: visitors,
-                  label: 'زوار',
-                  onTap: () => _showList(context, uid, 'visitors', 'الزوار'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _badge({required String icon, required String label, required Color color}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withAlpha(25),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withAlpha(80)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(icon, style: const TextStyle(fontSize: 13)),
-          const SizedBox(width: 5),
-          Text(label, style: TextStyle(color: color, fontSize: 12, fontFamily: 'Cairo', fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-
-  void _showList(BuildContext context, String uid, String collection, String title) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _UserListSheet(uid: uid, collection: collection, title: title),
-    );
-  }
+  State<_CountrySheet> createState() => _CountrySheetState();
 }
 
-class _StatBtn extends StatelessWidget {
-  const _StatBtn({required this.count, required this.label, required this.onTap});
-  final int count;
-  final String label;
-  final VoidCallback onTap;
+class _CountrySheetState extends State<_CountrySheet> {
+  final _searchCtrl = TextEditingController();
+  List<(String, String)> _filtered = _kCountries;
 
-  String _fmt(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K';
-    return '$n';
+  void _onSearch(String q) {
+    setState(() {
+      _filtered = q.isEmpty
+          ? _kCountries
+          : _kCountries
+              .where((c) => c.$2.contains(q) || c.$1.contains(q))
+              .toList();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _fmt(count),
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontFamily: 'Cairo',
-                  fontSize: 16,
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.72,
+      decoration: const BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(children: [
+        Container(
+          margin: const EdgeInsets.only(top: 12, bottom: 4),
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+              color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+        ),
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 10),
+          child: Text('اختر دولتك',
+              style: TextStyle(
+                  fontSize: 18,
                   fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
                   fontFamily: 'Cairo',
-                  fontSize: 11,
-                ),
-              ),
-            ],
+                  color: AppColors.textPrimary)),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: TextField(
+            controller: _searchCtrl,
+            onChanged: _onSearch,
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+                fontFamily: 'Cairo',
+                fontSize: 14,
+                color: AppColors.textPrimary),
+            decoration: InputDecoration(
+              hintText: 'ابحث عن دولة...',
+              hintStyle: const TextStyle(
+                  fontFamily: 'Cairo', color: AppColors.textHint),
+              prefixIcon: const Icon(Icons.search_rounded,
+                  color: AppColors.textSecondary),
+              filled: true,
+              fillColor: AppColors.background,
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            ),
           ),
         ),
-      ),
+        const Divider(height: 1, color: AppColors.divider),
+        Expanded(
+          child: ListView.builder(
+            itemCount: _filtered.length,
+            itemBuilder: (_, i) {
+              final (flag, name) = _filtered[i];
+              final value = '$flag $name';
+              final isSelected = widget.selected == value;
+              return InkWell(
+                onTap: () => widget.onSelect(value),
+                child: Container(
+                  color: isSelected
+                      ? AppColors.primary.withAlpha(18)
+                      : null,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 14),
+                  child: Row(children: [
+                    if (isSelected) ...[
+                      const Icon(Icons.check_circle_rounded,
+                          color: AppColors.primary, size: 18),
+                      const SizedBox(width: 8),
+                    ],
+                    Text(flag, style: const TextStyle(fontSize: 24)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(name,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontFamily: 'Cairo',
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.normal,
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.textPrimary)),
+                    ),
+                  ]),
+                ),
+              );
+            },
+          ),
+        ),
+      ]),
     );
   }
 }
 
-// Sheet قائمة المستخدمين (متابعين / معجبين / زوار)
-class _UserListSheet extends StatelessWidget {
-  const _UserListSheet({required this.uid, required this.collection, required this.title});
-  final String uid;
-  final String collection;
-  final String title;
+// ── Color Picker ──────────────────────────────────────────────────────────────
+
+class _ColorPicker extends StatelessWidget {
+  const _ColorPicker(
+      {required this.label,
+      required this.selectedHex,
+      required this.onSelect});
+  final String label;
+  final String? selectedHex;
+  final void Function(String hex) onSelect;
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.55,
-      minChildSize: 0.35,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (_, ctrl) => Column(
-        children: [
-          const SizedBox(height: 10),
-          Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)))),
-          const SizedBox(height: 12),
-          Text(title, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          const Divider(color: AppColors.divider, height: 1),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(uid)
-                  .collection(collection)
-                  .orderBy('addedAt', descending: true)
-                  .limit(50)
-                  .snapshots(),
-              builder: (ctx, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final docs = snap.data?.docs ?? [];
-                if (docs.isEmpty) {
-                  return const Center(
-                    child: Text('لا يوجد بيانات بعد', style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo')),
-                  );
-                }
-                return ListView.builder(
-                  controller: ctrl,
-                  itemCount: docs.length,
-                  itemBuilder: (_, i) {
-                    final d = docs[i].data() as Map<String, dynamic>;
-                    final name   = d['displayName'] as String? ?? d['name'] as String? ?? 'مستخدم';
-                    final avatar = d['avatar']      as String?;
-                    return ListTile(
-                      leading: CircleAvatar(
-                        radius: 20,
-                        backgroundColor: AppColors.surfaceLight,
-                        backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-                        child: avatar == null ? Text(name.isNotEmpty ? name[0] : '؟', style: const TextStyle(color: Colors.white, fontFamily: 'Cairo')) : null,
-                      ),
-                      title: Text(name, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 13)),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontFamily: 'Cairo',
+                fontSize: 13)),
+        const SizedBox(height: 8),
+        Row(
+          children: kChatColors.map((c) {
+            final isSelected = selectedHex == c.$1;
+            final clr = hexColor(c.$1);
+            return GestureDetector(
+              onTap: () => onSelect(c.$1),
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: clr,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected
+                        ? AppColors.primary
+                        : AppColors.divider,
+                    width: isSelected ? 2.5 : 1,
+                  ),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                              color: clr.withAlpha(100), blurRadius: 8)
+                        ]
+                      : null,
+                ),
+                child: isSelected
+                    ? Icon(
+                        Icons.check_rounded,
+                        color: clr.computeLuminance() > 0.5
+                            ? Colors.black87
+                            : Colors.white,
+                        size: 16,
+                      )
+                    : null,
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 }
 
-// ── Language Sheet ────────────────────────────────────────────────
+// ── Language Sheet ────────────────────────────────────────────────────────────
+
 class _LanguageSheet extends ConsumerWidget {
   const _LanguageSheet();
 
@@ -392,20 +657,43 @@ class _LanguageSheet extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)))),
+          Center(
+              child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: AppColors.divider,
+                      borderRadius: BorderRadius.circular(2)))),
           const SizedBox(height: 20),
-          const Text('اختر اللغة', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700, fontFamily: 'Cairo')),
+          const Text('اختر اللغة',
+              style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Cairo')),
           const SizedBox(height: 16),
-          _langTile(context, ref, flag: '🇸🇦', name: 'العربية', code: 'ar', current: locale.languageCode),
+          _langTile(context, ref,
+              flag: '🇸🇦',
+              name: 'العربية',
+              code: 'ar',
+              current: locale.languageCode),
           const SizedBox(height: 8),
-          _langTile(context, ref, flag: '🇬🇧', name: 'English', code: 'en', current: locale.languageCode),
+          _langTile(context, ref,
+              flag: '🇬🇧',
+              name: 'English',
+              code: 'en',
+              current: locale.languageCode),
           const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _langTile(BuildContext context, WidgetRef ref, {required String flag, required String name, required String code, required String current}) {
+  Widget _langTile(BuildContext context, WidgetRef ref,
+      {required String flag,
+      required String name,
+      required String code,
+      required String current}) {
     final isSelected = current == code;
     return GestureDetector(
       onTap: () {
@@ -414,25 +702,39 @@ class _LanguageSheet extends ConsumerWidget {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withAlpha(30) : AppColors.surfaceLight,
+          color: isSelected
+              ? AppColors.primary.withAlpha(30)
+              : AppColors.surfaceLight,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? AppColors.primary : Colors.transparent),
+          border: Border.all(
+              color: isSelected ? AppColors.primary : Colors.transparent),
         ),
         child: Row(children: [
           Text(flag, style: const TextStyle(fontSize: 22)),
           const SizedBox(width: 12),
-          Text(name, style: TextStyle(color: isSelected ? AppColors.primary : AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 15, fontWeight: FontWeight.w600)),
+          Text(name,
+              style: TextStyle(
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.textPrimary,
+                  fontFamily: 'Cairo',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600)),
           const Spacer(),
-          if (isSelected) const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 20),
+          if (isSelected)
+            const Icon(Icons.check_circle_rounded,
+                color: AppColors.primary, size: 20),
         ]),
       ),
     );
   }
 }
 
-// ── Notification Settings Sheet ───────────────────────────────────
+// ── Notification Sheet ────────────────────────────────────────────────────────
+
 class _NotifSheet extends StatefulWidget {
   const _NotifSheet();
 
@@ -450,28 +752,50 @@ class _NotifSheetState extends State<_NotifSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)))),
+          Center(
+              child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: AppColors.divider,
+                      borderRadius: BorderRadius.circular(2)))),
           const SizedBox(height: 20),
-          const Text('إشعارات التطبيق', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700, fontFamily: 'Cairo')),
+          const Text('إشعارات التطبيق',
+              style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Cairo')),
           const SizedBox(height: 8),
-          _switchTile('رسائل جديدة', _messages, (v) => setState(() => _messages = v)),
-          _switchTile('هدايا واردة', _gifts, (v) => setState(() => _gifts = v)),
-          _switchTile('متابعون جدد', _follows, (v) => setState(() => _follows = v)),
-          _switchTile('دعوات الغرف', _rooms, (v) => setState(() => _rooms = v)),
+          _switchTile('رسائل جديدة', _messages,
+              (v) => setState(() => _messages = v)),
+          _switchTile(
+              'هدايا واردة', _gifts, (v) => setState(() => _gifts = v)),
+          _switchTile('متابعون جدد', _follows,
+              (v) => setState(() => _follows = v)),
+          _switchTile(
+              'دعوات الغرف', _rooms, (v) => setState(() => _rooms = v)),
           const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _switchTile(String title, bool value, void Function(bool) onChanged) => ListTile(
+  Widget _switchTile(String title, bool value, void Function(bool) onChanged) =>
+      ListTile(
         contentPadding: EdgeInsets.zero,
-        title: Text(title, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo')),
-        trailing: Switch(value: value, onChanged: onChanged, activeThumbColor: AppColors.primary),
+        title: Text(title,
+            style: const TextStyle(
+                color: AppColors.textPrimary, fontFamily: 'Cairo')),
+        trailing: Switch(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: AppColors.primary),
       );
 }
 
-// ── Privacy Sheet ─────────────────────────────────────────────────
+// ── Privacy Sheet ─────────────────────────────────────────────────────────────
+
 class _PrivacySheet extends StatelessWidget {
   const _PrivacySheet();
 
@@ -482,9 +806,20 @@ class _PrivacySheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)))),
+          Center(
+              child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: AppColors.divider,
+                      borderRadius: BorderRadius.circular(2)))),
           const SizedBox(height: 20),
-          const Text('الخصوصية', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700, fontFamily: 'Cairo')),
+          const Text('الخصوصية',
+              style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Cairo')),
           const SizedBox(height: 8),
           _privacyRow('من يستطيع إرسال رسائل لي', 'الجميع'),
           _privacyRow('من يستطيع رؤية ملفي', 'الجميع'),
@@ -497,12 +832,21 @@ class _PrivacySheet extends StatelessWidget {
 
   Widget _privacyRow(String title, String value) => ListTile(
         contentPadding: EdgeInsets.zero,
-        title: Text(title, style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 13)),
-        trailing: Text(value, style: const TextStyle(color: AppColors.primary, fontFamily: 'Cairo', fontSize: 12)),
+        title: Text(title,
+            style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontFamily: 'Cairo',
+                fontSize: 13)),
+        trailing: Text(value,
+            style: const TextStyle(
+                color: AppColors.primary,
+                fontFamily: 'Cairo',
+                fontSize: 12)),
       );
 }
 
-// ── Text Page ─────────────────────────────────────────────────────
+// ── Text Page ─────────────────────────────────────────────────────────────────
+
 class _TextPage extends StatelessWidget {
   const _TextPage({required this.title, required this.content});
   final String title, content;
@@ -513,12 +857,21 @@ class _TextPage extends StatelessWidget {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.surface,
-        title: Text(title, style: const TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_rounded), onPressed: () => Navigator.pop(context)),
+        title: Text(title,
+            style: const TextStyle(
+                fontFamily: 'Cairo', fontWeight: FontWeight.w700)),
+        leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_rounded),
+            onPressed: () => Navigator.pop(context)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-        child: Text(content, style: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 14, height: 1.8)),
+        child: Text(content,
+            style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontFamily: 'Cairo',
+                fontSize: 14,
+                height: 1.8)),
       ),
     );
   }

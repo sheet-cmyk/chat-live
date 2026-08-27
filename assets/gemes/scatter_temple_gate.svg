@@ -1,0 +1,39 @@
+<svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="skyGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFD98A"/>
+      <stop offset="60%" stop-color="#E8862B"/>
+      <stop offset="100%" stop-color="#7A3B10"/>
+    </linearGradient>
+    <linearGradient id="stoneGold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E8C874"/>
+      <stop offset="100%" stop-color="#96692A"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="284" height="284" rx="24" fill="#20120A"/>
+  <rect x="8" y="8" width="284" height="284" rx="24" fill="none" stroke="#D4AF37" stroke-width="8"/>
+
+  <rect x="24" y="24" width="252" height="252" fill="url(#skyGlow)"/>
+
+  <!-- two pylon towers -->
+  <path d="M40 250 L40 90 L95 40 L95 250 Z" fill="url(#stoneGold)" stroke="#3B2412" stroke-width="5"/>
+  <path d="M260 250 L260 90 L205 40 L205 250 Z" fill="url(#stoneGold)" stroke="#3B2412" stroke-width="5"/>
+
+  <!-- carved lines on towers -->
+  <path d="M55 100 L55 235 M75 90 L75 235" stroke="#3B2412" stroke-width="3" opacity="0.5"/>
+  <path d="M245 100 L245 235 M225 90 L225 235" stroke="#3B2412" stroke-width="3" opacity="0.5"/>
+
+  <!-- central glowing doorway -->
+  <path d="M110 250 L110 120 Q150 70 190 120 L190 250 Z" fill="#FFE9A8"/>
+  <path d="M110 250 L110 120 Q150 70 190 120 L190 250 Z" fill="url(#skyGlow)" opacity="0.4"/>
+  <circle cx="150" cy="150" r="34" fill="#FFF3D0" opacity="0.9"/>
+  <circle cx="150" cy="150" r="34" fill="none" stroke="#D4AF37" stroke-width="4"/>
+
+  <!-- winged sun disc above -->
+  <g transform="translate(150,50)">
+    <circle r="14" fill="#D4AF37" stroke="#3B2412" stroke-width="3"/>
+    <path d="M-60 6 Q-30 -14 -6 4" fill="none" stroke="#2E8B8B" stroke-width="8" stroke-linecap="round"/>
+    <path d="M60 6 Q30 -14 6 4" fill="none" stroke="#2E8B8B" stroke-width="8" stroke-linecap="round"/>
+  </g>
+</svg>

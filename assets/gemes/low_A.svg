@@ -1,0 +1,12 @@
+<svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="letterGold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F4E4BC"/>
+      <stop offset="100%" stop-color="#D4AF37"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="284" height="284" rx="24" fill="#2A1608"/>
+  <rect x="8" y="8" width="284" height="284" rx="24" fill="none" stroke="#C23B2A" stroke-width="8"/>
+  <rect x="40" y="40" width="220" height="220" rx="16" fill="none" stroke="#C23B2A" stroke-width="3" opacity="0.5"/>
+  <text x="150" y="200" font-family="Georgia, 'Times New Roman', serif" font-size="170" font-weight="bold" text-anchor="middle" fill="url(#letterGold)" stroke="#3B2412" stroke-width="3">A</text>
+</svg>

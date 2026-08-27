@@ -8,26 +8,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/chat_colors.dart';
 import '../../../../app/routes.dart';
 import '../providers/auth_provider.dart';
 import '../../../wallet/presentation/providers/wallet_provider.dart';
 import '../../../levels/presentation/providers/level_provider.dart';
 import '../../../admin/presentation/providers/admin_provider.dart';
-
-// ── قائمة الدول ───────────────────────────────────────────────────────────────
-const _kProfileCountries = [
-  ('🇸🇦', 'السعودية'),  ('🇮🇶', 'العراق'),    ('🇦🇪', 'الإمارات'),
-  ('🇰🇼', 'الكويت'),   ('🇶🇦', 'قطر'),        ('🇧🇭', 'البحرين'),
-  ('🇴🇲', 'عُمان'),    ('🇾🇪', 'اليمن'),       ('🇯🇴', 'الأردن'),
-  ('🇸🇾', 'سوريا'),    ('🇱🇧', 'لبنان'),       ('🇵🇸', 'فلسطين'),
-  ('🇪🇬', 'مصر'),      ('🇱🇾', 'ليبيا'),        ('🇹🇳', 'تونس'),
-  ('🇩🇿', 'الجزائر'),  ('🇲🇦', 'المغرب'),       ('🇸🇩', 'السودان'),
-  ('🇹🇷', 'تركيا'),    ('🇮🇷', 'إيران'),         ('🇵🇰', 'باكستان'),
-  ('🇮🇳', 'الهند'),    ('🇬🇧', 'بريطانيا'),     ('🇺🇸', 'أمريكا'),
-  ('🇩🇪', 'ألمانيا'),  ('🇫🇷', 'فرنسا'),        ('🇸🇪', 'السويد'),
-  ('🇨🇦', 'كندا'),     ('🇦🇺', 'أستراليا'),
-];
 
 // ── Upload helper ─────────────────────────────────────────────────────────────
 
@@ -92,15 +77,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (mounted) setState(() => _uploadingCover = false);
   }
 
-  void _openEditSheet(String uid, Map<String, dynamic> profile) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _EditSheet(uid: uid, profile: profile),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
@@ -152,19 +128,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       child: _CamBadge(size: 32, iconSize: 16)),
                   ]),
                 ),
-                // Settings icon
-                SafeArea(
-                  child: Align(
-                    alignment: Alignment.topRight,
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: IconButton(
-                        icon: const Icon(Icons.settings_rounded, color: Colors.white),
-                        onPressed: () => context.push(AppRoutes.settings),
-                      ),
-                    ),
-                  ),
-                ),
                 // Avatar
                 Positioned(bottom: -54, left: 0, right: 0,
                   child: Center(
@@ -205,18 +168,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: Padding(
                 padding: const EdgeInsets.only(top: 64),
                 child: Column(children: [
-                  // Name + edit
+                  // Name + edit icon → opens unified Profile screen
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                     Text(name, style: const TextStyle(
                       color: AppColors.textPrimary, fontSize: 22,
                       fontWeight: FontWeight.w800, fontFamily: 'Cairo')),
                     const SizedBox(width: 6),
                     GestureDetector(
-                      onTap: () => _openEditSheet(uid, profile),
+                      onTap: () => context.push(AppRoutes.settings),
                       child: const Icon(Icons.edit_rounded, color: AppColors.primary, size: 20)),
                   ]),
 
-                  // ── الجنس + الدولة تحت الاسم ──────────────────────────────
+                  // الجنس + الدولة
                   if (profile['gender'] != null || profile['country'] != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 6, bottom: 4),
@@ -235,7 +198,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
 
                   const SizedBox(height: 12),
-                  // Support Level Bar (مستوى الدعم)
+                  _SocialStats(uid: uid, profile: profile),
+                  const SizedBox(height: 12),
                   _SupportLevelCard(
                     diamonds: (profile['totalGiftDiamonds'] as num?)?.toInt()
                         ?? (profile['diamonds'] as num?)?.toInt()
@@ -265,7 +229,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   _PBtn(icon: Icons.calendar_today_rounded, label: 'المكافأة اليومية 🎁', color: AppColors.gold, onTap: () => context.push('/daily-reward')),
                   _PBtn(icon: Icons.history_rounded, label: 'الغرف المزارة', color: AppColors.accent, onTap: () => context.push('/room-history')),
                   _PBtn(icon: Icons.people_rounded, label: 'الأصدقاء', color: AppColors.success, onTap: () => context.push('/friends')),
-                  _PBtn(icon: Icons.edit_rounded, label: 'تعديل الملف الشخصي', color: AppColors.primary, onTap: () => _openEditSheet(uid, profile)),
+                  _PBtn(icon: Icons.settings_rounded, label: 'الإعدادات', color: AppColors.primary, onTap: () => context.push(AppRoutes.settings)),
                   if (isAdmin)
                     _PBtn(icon: Icons.admin_panel_settings_rounded, label: 'لوحة الإدارة ⚙️', color: Colors.amber, onTap: () => context.push(AppRoutes.admin)),
                   _PBtn(
@@ -302,310 +266,6 @@ class _CamBadge extends StatelessWidget {
     ),
     child: Icon(Icons.camera_alt_rounded, color: Colors.white, size: iconSize),
   );
-}
-
-// ── Edit Sheet ────────────────────────────────────────────────────────────────
-
-class _EditSheet extends StatefulWidget {
-  const _EditSheet({required this.uid, required this.profile});
-  final String uid;
-  final Map<String, dynamic> profile;
-  @override
-  State<_EditSheet> createState() => _EditSheetState();
-}
-
-class _EditSheetState extends State<_EditSheet> {
-  late final TextEditingController _nameCtrl;
-  XFile? _roomFile;
-  bool _loading = false;
-  String? _nameColorHex;
-  String? _textColorHex;
-  String? _country;
-  String? _gender;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameCtrl = TextEditingController(
-      text: widget.profile['displayName'] as String? ?? '');
-    _nameColorHex = widget.profile['nameColor'] as String?;
-    _textColorHex = widget.profile['textColor'] as String?;
-    _country = widget.profile['country'] as String?;
-    _gender  = widget.profile['gender']  as String?;
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickRoom() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery, imageQuality: 75, maxWidth: 700);
-    if (picked != null && mounted) setState(() => _roomFile = picked);
-  }
-
-  Future<void> _pickCountry() async {
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _ProfileCountrySheet(
-        selected: _country,
-        onSelect: (c) => Navigator.pop(context, c),
-      ),
-    );
-    if (result != null && mounted) setState(() => _country = result);
-  }
-
-  Future<void> _save() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) return;
-    setState(() => _loading = true);
-    try {
-      final updates = <String, dynamic>{};
-
-      if (name != (widget.profile['displayName'] ?? '')) {
-        updates['displayName'] = name;
-        await FirebaseAuth.instance.currentUser?.updateDisplayName(name);
-      }
-
-      if (_roomFile != null) {
-        final url = await _uploadToStorage(
-          'users/${widget.uid}/room.jpg', _roomFile!.path);
-        updates['roomPhoto'] = url;
-      }
-
-      if (_nameColorHex != null) updates['nameColor'] = _nameColorHex;
-      if (_textColorHex != null) updates['textColor'] = _textColorHex;
-      if (_country != null)      updates['country']   = _country;
-      // الجنس: يُحفظ فقط إذا لم يكن محدداً من قبل (لا يمكن تغييره بعد التحديد)
-      if (widget.profile['gender'] == null && _gender != null) {
-        updates['gender'] = _gender;
-      }
-
-      if (updates.isNotEmpty) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.uid)
-            .set(updates, SetOptions(merge: true));
-      }
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      if (mounted) {
-        setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')),
-          backgroundColor: Colors.red.shade800));
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final roomPhoto = widget.profile['roomPhoto'] as String?;
-    final genderLocked = widget.profile['gender'] != null;
-
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        constraints: BoxConstraints(maxHeight: size.height * 0.90),
-        decoration: const BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // handle
-            Container(width: 38, height: 4,
-              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 14),
-            const Text('تعديل الملف الشخصي',
-              style: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo',
-                fontWeight: FontWeight.w900, fontSize: 18)),
-            const SizedBox(height: 16),
-
-            // محتوى قابل للتمرير
-            Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // الاسم
-                    TextField(
-                      controller: _nameCtrl,
-                      autofocus: false,
-                      maxLength: 30,
-                      style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 15),
-                      decoration: InputDecoration(
-                        labelText: 'الاسم الظاهر',
-                        labelStyle: const TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo'),
-                        prefixIcon: const Icon(Icons.person_rounded, color: AppColors.primary),
-                        filled: true, fillColor: AppColors.background,
-                        counterStyle: const TextStyle(color: AppColors.textHint, fontSize: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.primary, width: 2)),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // الدولة
-                    const Align(alignment: Alignment.centerRight,
-                      child: Text('الدولة',
-                        style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13))),
-                    const SizedBox(height: 6),
-                    GestureDetector(
-                      onTap: _pickCountry,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: AppColors.background,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: _country != null ? AppColors.primary : AppColors.divider,
-                            width: _country != null ? 1.5 : 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Text(_country?.split(' ').first ?? '🌍',
-                              style: const TextStyle(fontSize: 22)),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                _country != null
-                                    ? _country!.split(' ').sublist(1).join(' ')
-                                    : 'اختر دولتك',
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  fontFamily: 'Cairo', fontSize: 15,
-                                  color: _country != null ? AppColors.textPrimary : AppColors.textHint,
-                                ),
-                              ),
-                            ),
-                            Icon(Icons.keyboard_arrow_down_rounded,
-                              color: _country != null ? AppColors.primary : AppColors.textHint),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // الجنس
-                    const Align(alignment: Alignment.centerRight,
-                      child: Text('الجنس',
-                        style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13))),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _SheetGenderBtn(
-                          symbol: '♀', label: 'أنثى',
-                          selected: _gender == 'female',
-                          activeColor: const Color(0xFFF48FB1),
-                          locked: genderLocked,
-                          onTap: () => setState(() => _gender = 'female'),
-                        ),
-                        const SizedBox(width: 32),
-                        _SheetGenderBtn(
-                          symbol: '♂', label: 'ذكر',
-                          selected: _gender == 'male',
-                          activeColor: const Color(0xFF90CAF9),
-                          locked: genderLocked,
-                          onTap: () => setState(() => _gender = 'male'),
-                        ),
-                      ],
-                    ),
-                    if (genderLocked)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 6),
-                        child: Center(
-                          child: Text('* الجنس لا يمكن تغييره بعد التحديد',
-                            style: TextStyle(color: Color(0xFFE57373), fontFamily: 'Cairo', fontSize: 12)),
-                        ),
-                      ),
-                    const SizedBox(height: 14),
-
-                    // صورة الروم
-                    const Align(alignment: Alignment.centerRight,
-                      child: Text('صورة الروم',
-                        style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13))),
-                    const SizedBox(height: 6),
-                    GestureDetector(
-                      onTap: _pickRoom,
-                      child: Container(
-                        height: 110,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: AppColors.background,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.divider),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: _roomFile != null
-                            ? Image.file(File(_roomFile!.path), fit: BoxFit.cover)
-                            : roomPhoto != null
-                                ? CachedNetworkImage(imageUrl: roomPhoto, fit: BoxFit.cover)
-                                : const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                    Icon(Icons.meeting_room_rounded, color: AppColors.textHint, size: 36),
-                                    SizedBox(height: 6),
-                                    Text('اضغط لاختيار صورة الروم',
-                                      style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo', fontSize: 12)),
-                                  ]),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // ألوان
-                    _ColorPicker(
-                      label: 'لون الاسم',
-                      selectedHex: _nameColorHex,
-                      onSelect: (h) => setState(() => _nameColorHex = h),
-                    ),
-                    const SizedBox(height: 14),
-                    _ColorPicker(
-                      label: 'لون الكتابة',
-                      selectedHex: _textColorHex,
-                      onSelect: (h) => setState(() => _textColorHex = h),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                ),
-              ),
-            ),
-
-            // زر الحفظ (ثابت في الأسفل)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 24, top: 8),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: _loading ? null : _save,
-                  child: _loading
-                      ? const SizedBox(width: 22, height: 22,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                      : const Text('حفظ ✅',
-                          style: TextStyle(color: Colors.white, fontFamily: 'Cairo',
-                            fontWeight: FontWeight.w900, fontSize: 16)),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 // ── Widgets ───────────────────────────────────────────────────────────────────
@@ -726,17 +386,6 @@ Color _suppColor(int level) {
   return const Color(0xFFFF5252);
 }
 
-String _suppRank(int level) {
-  if (level <  10) return 'مبتدئ';
-  if (level <  30) return 'ناشئ';
-  if (level <  50) return 'متوسط';
-  if (level <  70) return 'متقدم';
-  if (level <  90) return 'نجم';
-  if (level < 150) return 'أسطورة';
-  if (level < 300) return 'عملاق';
-  return 'خارق';
-}
-
 String _suppFmt(int n) {
   if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
   if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}K';
@@ -751,7 +400,6 @@ class _SupportLevelCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final info     = _calcSupportLevel(diamonds);
     final color    = _suppColor(info.level);
-    final rank     = _suppRank(info.level);
     final progress = info.needed > 0 ? (info.current / info.needed).clamp(0.0, 1.0) : 1.0;
 
     return Padding(
@@ -759,7 +407,6 @@ class _SupportLevelCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // عنوان + رقم المستوى
           Row(
             children: [
               Text(
@@ -774,7 +421,6 @@ class _SupportLevelCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          // شريط التقدم
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
@@ -785,7 +431,6 @@ class _SupportLevelCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 5),
-          // نص التقدم
           Text(
             info.needed > 0
                 ? '💎 ${_suppFmt(info.current)} / ${_suppFmt(info.needed)}'
@@ -798,313 +443,146 @@ class _SupportLevelCard extends StatelessWidget {
   }
 }
 
-// ── Gift Level Bar ────────────────────────────────────────────────────────────
+// ── Social Stats (متابعين / معجبين / زوار) ───────────────────────────────────
 
-class _GiftLevelBar extends StatelessWidget {
-  const _GiftLevelBar({required this.profile});
+class _SocialStats extends StatelessWidget {
+  const _SocialStats({required this.uid, required this.profile});
+  final String uid;
   final Map<String, dynamic> profile;
 
-  @override
-  Widget build(BuildContext context) {
-    final totalSent = (profile['totalGiftsSent'] as num?)?.toInt() ?? 0;
-    if (totalSent == 0) return const SizedBox.shrink();
+  String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)}K';
+    return '$n';
+  }
 
-    final lvlIdx = giftSendLevelIndex(totalSent);
-    final lvl = kGiftSendLevels[lvlIdx];
-    final isMax = lvlIdx >= kGiftSendLevels.length - 1;
-    final nextMin = isMax ? lvl.$1 : kGiftSendLevels[lvlIdx + 1].$1;
-    final progress = isMax
-        ? 1.0
-        : ((totalSent - lvl.$1) / (nextMin - lvl.$1)).clamp(0.0, 1.0);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.divider),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  '${lvl.$3} راسل الهدايا',
-                  style: TextStyle(
-                    color: lvl.$4,
-                    fontFamily: 'Cairo',
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'Lv.${lvlIdx + 1} · ${lvl.$2}',
-                  style: TextStyle(
-                    color: lvl.$4,
-                    fontSize: 11,
-                    fontFamily: 'Cairo',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 6,
-                backgroundColor: AppColors.surfaceLight,
-                valueColor: AlwaysStoppedAnimation<Color>(lvl.$4),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '💎 ${fmtDiamonds(totalSent)} أرسلت للناس',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontFamily: 'Cairo',
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ),
-      ),
+  void _showList(BuildContext context, String collection, String title) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _UserListSheet(uid: uid, collection: collection, title: title),
     );
   }
-}
-
-// ── منتقي الدولة في شاشة الملف الشخصي ───────────────────────────────────────
-
-class _ProfileCountrySheet extends StatefulWidget {
-  const _ProfileCountrySheet({required this.selected, required this.onSelect});
-  final String? selected;
-  final void Function(String) onSelect;
-
-  @override
-  State<_ProfileCountrySheet> createState() => _ProfileCountrySheetState();
-}
-
-class _ProfileCountrySheetState extends State<_ProfileCountrySheet> {
-  final _searchCtrl = TextEditingController();
-  List<(String, String)> _filtered = _kProfileCountries;
-
-  void _onSearch(String q) {
-    setState(() {
-      _filtered = q.isEmpty
-          ? _kProfileCountries
-          : _kProfileCountries.where((c) => c.$2.contains(q) || c.$1.contains(q)).toList();
-    });
-  }
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
+    final following = (profile['followingCount'] as num?)?.toInt() ?? 0;
+    final followers = (profile['followersCount'] as num?)?.toInt() ?? 0;
+    final visitors  = (profile['visitorsCount']  as num?)?.toInt() ?? 0;
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.72,
-      decoration: const BoxDecoration(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
       ),
-      child: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 12, bottom: 4),
-            width: 40, height: 4,
-            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 10),
-            child: Text('اختر دولتك',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
-                fontFamily: 'Cairo', color: AppColors.textPrimary)),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: _onSearch,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontFamily: 'Cairo', fontSize: 14, color: AppColors.textPrimary),
-              decoration: InputDecoration(
-                hintText: 'ابحث عن دولة...',
-                hintStyle: const TextStyle(fontFamily: 'Cairo', color: AppColors.textHint),
-                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textSecondary),
-                filled: true, fillColor: AppColors.background,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.divider),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _filtered.length,
-              itemBuilder: (_, i) {
-                final (flag, name) = _filtered[i];
-                final value = '$flag $name';
-                final isSelected = widget.selected == value;
-                return InkWell(
-                  onTap: () => widget.onSelect(value),
-                  child: Container(
-                    color: isSelected ? AppColors.primary.withAlpha(18) : null,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    child: Row(
-                      children: [
-                        if (isSelected) ...[
-                          const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 18),
-                          const SizedBox(width: 8),
-                        ],
-                        Text(flag, style: const TextStyle(fontSize: 24)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(name, textAlign: TextAlign.right,
-                            style: TextStyle(
-                              fontSize: 15, fontFamily: 'Cairo',
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
-                              color: isSelected ? AppColors.primary : AppColors.textPrimary,
-                            )),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+      child: IntrinsicHeight(
+        child: Row(children: [
+          _statCell(_fmt(following), 'متابَعون', () => _showList(context, 'following', 'المتابَعون')),
+          const VerticalDivider(color: AppColors.divider, width: 1),
+          _statCell(_fmt(followers), 'معجبون', () => _showList(context, 'followers', 'المعجبون')),
+          const VerticalDivider(color: AppColors.divider, width: 1),
+          _statCell(_fmt(visitors), 'زوار', () => _showList(context, 'visitors', 'الزوار')),
+        ]),
       ),
     );
   }
-}
 
-// ── زر الجنس في شاشة التعديل ──────────────────────────────────────────────────
-
-class _SheetGenderBtn extends StatelessWidget {
-  const _SheetGenderBtn({
-    required this.symbol,
-    required this.label,
-    required this.selected,
-    required this.activeColor,
-    required this.locked,
-    required this.onTap,
-  });
-  final String symbol, label;
-  final bool selected, locked;
-  final Color activeColor;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: locked ? null : onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 90, height: 90,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: selected
-              ? activeColor.withAlpha(locked ? 100 : 180)
-              : AppColors.background,
-          border: Border.all(
-            color: selected ? activeColor : AppColors.divider,
-            width: selected ? 2 : 1,
+  Widget _statCell(String value, String label, VoidCallback onTap) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(value, style: const TextStyle(
+                  color: AppColors.textPrimary, fontFamily: 'Cairo',
+                  fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text(label, style: const TextStyle(
+                  color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 11)),
+            ],
           ),
-          boxShadow: selected && !locked
-              ? [BoxShadow(color: activeColor.withAlpha(100), blurRadius: 14, offset: const Offset(0, 4))]
-              : null,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(symbol,
-              style: TextStyle(
-                fontSize: 28,
-                color: selected ? activeColor : AppColors.textHint,
-              )),
-            const SizedBox(height: 2),
-            Text(label,
-              style: TextStyle(
-                fontSize: 11, fontFamily: 'Cairo',
-                color: selected ? activeColor : AppColors.textHint,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
-              )),
-          ],
         ),
       ),
     );
   }
 }
 
-// ── Color Picker ──────────────────────────────────────────────────────────────
+// ── User List Sheet ───────────────────────────────────────────────────────────
 
-class _ColorPicker extends StatelessWidget {
-  const _ColorPicker({
-    required this.label,
-    required this.selectedHex,
-    required this.onSelect,
-  });
-  final String label;
-  final String? selectedHex;
-  final void Function(String hex) onSelect;
+class _UserListSheet extends StatelessWidget {
+  const _UserListSheet({required this.uid, required this.collection, required this.title});
+  final String uid, collection, title;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontFamily: 'Cairo',
-            fontSize: 13,
-          ),
-        ),
+    return DraggableScrollableSheet(
+      initialChildSize: 0.55,
+      minChildSize: 0.35,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (_, ctrl) => Column(children: [
+        const SizedBox(height: 10),
+        Center(child: Container(
+            width: 36, height: 4,
+            decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)))),
+        const SizedBox(height: 12),
+        Text(title, style: const TextStyle(
+            color: AppColors.textPrimary, fontFamily: 'Cairo',
+            fontSize: 15, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
-        Row(
-          children: kChatColors.map((c) {
-            final isSelected = selectedHex == c.$1;
-            final clr = hexColor(c.$1);
-            return GestureDetector(
-              onTap: () => onSelect(c.$1),
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: clr,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isSelected ? AppColors.primary : AppColors.divider,
-                    width: isSelected ? 2.5 : 1,
-                  ),
-                  boxShadow: isSelected
-                      ? [BoxShadow(color: clr.withAlpha(100), blurRadius: 8)]
-                      : null,
-                ),
-                child: isSelected
-                    ? Icon(
-                        Icons.check_rounded,
-                        color: clr.computeLuminance() > 0.5
-                            ? Colors.black87
-                            : Colors.white,
-                        size: 16,
-                      )
-                    : null,
-              ),
-            );
-          }).toList(),
+        const Divider(color: AppColors.divider, height: 1),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users').doc(uid)
+                .collection(collection)
+                .orderBy('addedAt', descending: true)
+                .limit(50).snapshots(),
+            builder: (ctx, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final docs = snap.data?.docs ?? [];
+              if (docs.isEmpty) {
+                return const Center(child: Text('لا يوجد بيانات بعد',
+                    style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo')));
+              }
+              return ListView.builder(
+                controller: ctrl,
+                itemCount: docs.length,
+                itemBuilder: (_, i) {
+                  final d = docs[i].data() as Map<String, dynamic>;
+                  final name = d['displayName'] as String? ?? d['name'] as String? ?? 'مستخدم';
+                  final avatar = d['avatar'] as String?;
+                  return ListTile(
+                    leading: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: AppColors.surfaceLight,
+                      backgroundImage: avatar != null ? NetworkImage(avatar) : null,
+                      child: avatar == null
+                          ? Text(name.isNotEmpty ? name[0] : '؟',
+                              style: const TextStyle(color: Colors.white, fontFamily: 'Cairo'))
+                          : null,
+                    ),
+                    title: Text(name, style: const TextStyle(
+                        color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 13)),
+                  );
+                },
+              );
+            },
+          ),
         ),
-      ],
+      ]),
     );
   }
 }
+

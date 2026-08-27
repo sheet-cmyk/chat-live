@@ -213,6 +213,66 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
   Future<void> _goToRoom(RoomModel newRoom) async {
     if (_isNavigatingToRoom) return;
+
+    // إذا كان المستخدم على المايك، اطلب تأكيداً قبل الانتقال
+    final mySeat = ref.read(myCurrentSeatProvider);
+    if (mySeat >= 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            'أنت على المايك',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF202124),
+              fontFamily: 'Cairo',
+              fontWeight: FontWeight.w700,
+              fontSize: 17,
+            ),
+          ),
+          content: const Text(
+            'ستنزل من المايك عند الانتقال للغرفة الأخرى.\nهل تريد المتابعة؟',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF5F6368),
+              fontFamily: 'Cairo',
+              fontSize: 14,
+              height: 1.6,
+            ),
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF5F6368),
+                side: const BorderSide(color: Color(0xFFDADCE0)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              ),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء', style: TextStyle(fontFamily: 'Cairo', fontSize: 14)),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1A73E8),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('انتقل', style: TextStyle(fontFamily: 'Cairo', fontSize: 14, fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
     _isNavigatingToRoom = true;
     ref.read(minimizedRoomProvider.notifier).state = null;
     _leftCleanly = false;
@@ -320,33 +380,6 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       return;
     }
 
-    // تأكيد الصعود على المايك
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('صعود المايك', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 16)),
-        content: const Text('هل تريد الصعود على المايك؟', style: TextStyle(color: Colors.white70, fontFamily: 'Cairo')),
-        actionsAlignment: MainAxisAlignment.center,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('لا', style: TextStyle(color: Colors.redAccent, fontFamily: 'Cairo', fontSize: 15)),
-          ),
-          const SizedBox(width: 12),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF7C4DFF),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('نعم', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 15)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
 
     final mySeat = ref.read(myCurrentSeatProvider);
     final seatProfile = ref.read(userProfileStreamProvider).valueOrNull;

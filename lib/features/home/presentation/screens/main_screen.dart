@@ -262,7 +262,7 @@ class _BottomNav extends ConsumerWidget {
               _NavItem(icon: Icons.chat_bubble_rounded, label: 'الرسائل',  index: 1, current: currentIndex, badge: unread > 0 ? unread : null),
               const SizedBox(width: 56),
               _NavItem(icon: Icons.leaderboard_rounded, label: 'الترتيب',  index: 2, current: currentIndex),
-              _NavItem(icon: Icons.settings_rounded,    label: 'الإعدادات', index: 3, current: currentIndex),
+              _NavItem(icon: Icons.person_rounded,       label: 'أنا',        index: 3, current: currentIndex),
             ],
           ),
         ),

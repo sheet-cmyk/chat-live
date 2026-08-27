@@ -1,0 +1,39 @@
+<svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="sunGlow" cx="50%" cy="50%" r="60%">
+      <stop offset="0%" stop-color="#FFE9A8"/>
+      <stop offset="55%" stop-color="#F0B84A"/>
+      <stop offset="100%" stop-color="#B8791E"/>
+    </radialGradient>
+    <linearGradient id="frameGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F4E4BC"/>
+      <stop offset="50%" stop-color="#D4AF37"/>
+      <stop offset="100%" stop-color="#8A6318"/>
+    </linearGradient>
+    <linearGradient id="irisBlue" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3C7CA8"/>
+      <stop offset="100%" stop-color="#173B54"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="284" height="284" rx="24" fill="#2A1608"/>
+  <rect x="8" y="8" width="284" height="284" rx="24" fill="none" stroke="url(#frameGold)" stroke-width="8"/>
+
+  <circle cx="150" cy="150" r="118" fill="url(#sunGlow)"/>
+
+  <!-- almond eye shape -->
+  <path d="M40 150 Q150 60 260 150 Q150 240 40 150 Z" fill="#F4E4BC" stroke="#3B2412" stroke-width="6"/>
+  <circle cx="150" cy="150" r="46" fill="url(#irisBlue)" stroke="#3B2412" stroke-width="6"/>
+  <circle cx="150" cy="150" r="18" fill="#0B1A24"/>
+  <circle cx="138" cy="136" r="8" fill="#FFFFFF" opacity="0.85"/>
+
+  <!-- brow -->
+  <path d="M55 118 Q150 62 245 118" fill="none" stroke="#3B2412" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- teardrop / spiral marking (Horus/Ra eye motif, stylised & original) -->
+  <path d="M150 196 Q168 220 150 250 Q132 220 150 196 Z" fill="#3B2412"/>
+  <path d="M96 168 Q60 178 46 210" fill="none" stroke="#3B2412" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- small sun disc top -->
+  <circle cx="150" cy="46" r="16" fill="#D4AF37" stroke="#3B2412" stroke-width="4"/>
+</svg>

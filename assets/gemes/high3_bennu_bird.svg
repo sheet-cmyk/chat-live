@@ -1,0 +1,33 @@
+<svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="wingRed" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#C23B2A"/>
+      <stop offset="100%" stop-color="#7A1E15"/>
+    </linearGradient>
+    <linearGradient id="wingTeal" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2E8B8B"/>
+      <stop offset="100%" stop-color="#164B4B"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="284" height="284" rx="24" fill="#2A1608"/>
+  <rect x="8" y="8" width="284" height="284" rx="24" fill="none" stroke="#D4AF37" stroke-width="8"/>
+
+  <!-- body -->
+  <ellipse cx="150" cy="170" rx="34" ry="46" fill="#D4AF37" stroke="#3B2412" stroke-width="4"/>
+
+  <!-- left wing spread -->
+  <path d="M120 150 Q40 130 30 90 Q70 100 100 120 Q60 100 55 70 Q95 90 118 118 Z" fill="url(#wingTeal)" stroke="#3B2412" stroke-width="3"/>
+  <!-- right wing spread -->
+  <path d="M180 150 Q260 130 270 90 Q230 100 200 120 Q240 100 245 70 Q205 90 182 118 Z" fill="url(#wingRed)" stroke="#3B2412" stroke-width="3"/>
+
+  <!-- head -->
+  <circle cx="150" cy="118" r="20" fill="#D4AF37" stroke="#3B2412" stroke-width="4"/>
+  <path d="M150 118 L172 112 L152 128 Z" fill="#3B2412"/>
+  <circle cx="145" cy="112" r="4" fill="#1A1A1A"/>
+
+  <!-- crest feathers -->
+  <path d="M140 100 Q136 78 128 68 M150 96 Q150 72 150 60 M160 100 Q164 78 172 68" fill="none" stroke="#C23B2A" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- tail -->
+  <path d="M150 214 Q140 250 130 268 M150 214 Q150 254 150 272 M150 214 Q160 250 170 268" fill="none" stroke="#2E8B8B" stroke-width="6" stroke-linecap="round"/>
+</svg>

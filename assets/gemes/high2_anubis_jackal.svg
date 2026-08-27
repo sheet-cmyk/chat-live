@@ -1,0 +1,26 @@
+<svg viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="jackalBlack" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3A3A3A"/>
+      <stop offset="100%" stop-color="#0D0D0D"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="284" height="284" rx="24" fill="#2A1608"/>
+  <rect x="8" y="8" width="284" height="284" rx="24" fill="none" stroke="#D4AF37" stroke-width="8"/>
+
+  <!-- reclining jackal body silhouette -->
+  <path d="M40 230 Q40 170 90 160 L110 150 Q120 110 150 90 Q160 70 180 78 Q172 92 176 104 Q200 108 208 130 L230 150 Q245 165 240 190 L250 210 L230 215 L225 235 L60 235 Z"
+        fill="url(#jackalBlack)" stroke="#D4AF37" stroke-width="4"/>
+
+  <!-- ear -->
+  <path d="M150 92 Q140 55 168 62 Q170 90 158 100 Z" fill="url(#jackalBlack)" stroke="#D4AF37" stroke-width="3"/>
+
+  <!-- eye -->
+  <circle cx="192" cy="118" r="5" fill="#D4AF37"/>
+
+  <!-- gold collar -->
+  <path d="M170 138 Q205 148 222 168" fill="none" stroke="#D4AF37" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- base plinth -->
+  <rect x="55" y="235" width="190" height="18" rx="4" fill="#8A6318" stroke="#3B2412" stroke-width="3"/>
+</svg>
