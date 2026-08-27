@@ -69,6 +69,18 @@ class AuthRemoteDataSource {
     return _auth.signInAnonymously();
   }
 
+  // ── تسجيل الدخول ببريد إلكتروني وكلمة مرور ─────────────────
+  Future<UserCredential> signInWithEmailPassword(
+      String email, String password) =>
+      _auth.signInWithEmailAndPassword(email: email, password: password);
+
+  // ── ربط بريد وكلمة مرور بالمستخدم الحالي ────────────────────
+  Future<void> linkEmailPassword(String email, String password) async {
+    final credential = EmailAuthProvider.credential(
+        email: email, password: password);
+    await _auth.currentUser!.linkWithCredential(credential);
+  }
+
   // ── تسجيل الخروج ────────────────────────────────────────────
   Future<void> signOut() async {
     await _googleSignIn.signOut().catchError((_) => null);
@@ -90,9 +102,17 @@ class AuthRemoteDataSource {
         .set(user.toFirestore(), SetOptions(merge: true));
   }
 
-  // ── Firestore: تحديث حقول المستخدم ──────────────────────────
+  // ── Firestore: تحديث حقول المستخدم (set+merge يعمل حتى لو لم يكن الـ doc موجوداً) ──
   Future<void> updateUser(String uid, Map<String, dynamic> data) async {
-    await _firestore.collection('users').doc(uid).update(data);
+    await _firestore.collection('users').doc(uid).set(data, SetOptions(merge: true));
+  }
+
+  // ── Firestore: حفظ رقم الهاتف فقط (آمن للمستخدمين الجدد) ────────────────────
+  Future<void> savePhoneNumber(String uid, String phoneNumber) async {
+    await _firestore.collection('users').doc(uid).set(
+      {'phoneNumber': phoneNumber},
+      SetOptions(merge: true),
+    );
   }
 
   // ── تحديث حالة الاتصال ──────────────────────────────────────

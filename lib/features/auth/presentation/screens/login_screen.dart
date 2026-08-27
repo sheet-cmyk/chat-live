@@ -82,7 +82,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    final size      = MediaQuery.of(context).size;
+    final authState = ref.watch(authStateProvider);
+    final hasUser   = authState.valueOrNull != null;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -98,6 +100,47 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           Positioned(top: size.height * 0.58, right: 20, child: _Blob(22, const Color(0xFF34A853))),
           Positioned(top: size.height * 0.63, left: 16,  child: _Blob(15, const Color(0xFFFBBC05))),
 
+          // ── زر تخطي — يظهر فقط للمستخدم المسجل مسبقاً ────────────────
+          if (hasUser)
+            Positioned(
+              top: 0, left: 0, right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16, top: 10),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: GestureDetector(
+                      onTap: () => context.go(AppRoutes.home),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1A1A1A).withAlpha(200),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'تخطي',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: 'Cairo',
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                            Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 14),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 36),
@@ -106,19 +149,75 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 children: [
                   SizedBox(height: size.height * 0.10),
 
-                  // ── أيقونة التطبيق ───────────────────────────────────
-                  Container(
-                    width: 120, height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white,
-                      boxShadow: [BoxShadow(color: Colors.black.withAlpha(22), blurRadius: 24, offset: const Offset(0, 6))],
-                    ),
-                    padding: const EdgeInsets.all(16),
-                    child: ClipOval(child: Image.asset('assets/icon/icon.a1.png', fit: BoxFit.contain)),
+                  // ── أيقونة التطبيق مع شارة الاكس ────────────────────
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 120, height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          boxShadow: [BoxShadow(color: Colors.black.withAlpha(22), blurRadius: 24, offset: const Offset(0, 6))],
+                        ),
+                        child: ClipOval(
+                          child: Image.asset('assets/icon/icon.chatlive.1.png', fit: BoxFit.cover),
+                        ),
+                      ),
+                      // ── شارة الاكس الأحمر ──────────────────────────────
+                      Positioned(
+                        top: -4,
+                        right: -4,
+                        child: Container(
+                          width: 30, height: 30,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE53935),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2.5),
+                            boxShadow: [BoxShadow(color: const Color(0xFFE53935).withAlpha(100), blurRadius: 8, offset: const Offset(0, 3))],
+                          ),
+                          child: const Icon(Icons.close_rounded, color: Colors.white, size: 17),
+                        ),
+                      ),
+                    ],
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 14),
+
+                  // ── شحن مجاني ────────────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFF6B35), Color(0xFFE53935)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [BoxShadow(color: const Color(0xFFE53935).withAlpha(80), blurRadius: 10, offset: const Offset(0, 4))],
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.stars_rounded, color: Colors.white, size: 17),
+                        SizedBox(width: 6),
+                        Text(
+                          'شحن مجاني',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontFamily: 'Cairo',
+                            fontSize: 15,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        SizedBox(width: 6),
+                        Icon(Icons.stars_rounded, color: Colors.white, size: 17),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
 
                   const Text(
                     'LivChat',
