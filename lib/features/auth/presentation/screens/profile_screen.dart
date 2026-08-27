@@ -556,13 +556,18 @@ class _UserListSheet extends StatelessWidget {
               stream: FirebaseFirestore.instance
                   .collection('users').doc(uid)
                   .collection(collection)
-                  .orderBy('addedAt', descending: true)
                   .limit(50).snapshots(),
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final docs = snap.data?.docs ?? [];
+                final docs = List.of(snap.data?.docs ?? [])
+                  ..sort((a, b) {
+                    final at = (a.data() as Map<String, dynamic>)['addedAt'];
+                    final bt = (b.data() as Map<String, dynamic>)['addedAt'];
+                    if (at is Timestamp && bt is Timestamp) return bt.compareTo(at);
+                    return 0;
+                  });
                 if (docs.isEmpty) {
                   return const Center(child: Text('لا يوجد بيانات بعد',
                       style: TextStyle(

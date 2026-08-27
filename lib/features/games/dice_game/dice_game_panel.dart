@@ -379,7 +379,7 @@ class _DiceGamePanelState extends ConsumerState<DiceGamePanel>
                           // TRIPLE — centered square button
                           Center(
                             child: SizedBox.square(
-                              dimension: 80,
+                              dimension: 90,
                               child: _TripleButton(
                                 totalBets: round?.tripleBets ?? 0,
                                 myBet:     myBet.triple,
