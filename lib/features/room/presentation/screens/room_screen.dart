@@ -742,22 +742,21 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                 // شريط الهدايا (يظهر فقط عند التفعيل)
                 _GiftBar(roomId: _roomId),
 
-                // PK Challenge (يظهر عند التفعيل)
+                // PK Challenge: يعرض 3 مقاعد خاصة بدل شبكة الغرفة
                 PkBattleWidget(
-                  roomId:           _roomId,
-                  isHost:           widget.room.hostUid == _currentUser?.uid,
-                  currentUserId:    _currentUser?.uid,
-                  currentUserName:  _currentUser?.displayName,
-                  currentUserAvatar:_currentUser?.photoURL,
-                  hostName:         widget.room.hostName,
-                  hostAvatar:       widget.room.hostAvatar,
+                  roomId:            _roomId,
+                  isHost:            widget.room.hostUid == _currentUser?.uid,
+                  currentUserId:     _currentUser?.uid,
+                  currentUserName:   _currentUser?.displayName,
+                  currentUserAvatar: _currentUser?.photoURL,
                 ),
 
-                // شبكة المقاعد
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: _buildSeatGrid(seats),
-                ),
+                // شبكة المقاعد — مخفية أثناء PK
+                if (ref.watch(pkProvider(_roomId)).valueOrNull?.isVisible != true)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: _buildSeatGrid(seats),
+                  ),
 
                 // بانر الإعلان
                 if (_announcement.isNotEmpty)

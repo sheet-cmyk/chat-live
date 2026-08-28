@@ -257,67 +257,104 @@ class RoomStateRepository {
 
   Future<void> startPkWaiting(String roomId, {int durationSecs = 300}) async {
     await _db.collection('rooms').doc(roomId).update({
-      'pkStatus':        'waiting',
-      'pkRedPlayerId':   null,
-      'pkRedPlayerName': null,
-      'pkRedPlayerAvatar': null,
-      'pkBluePlayerId':  null,
-      'pkBluePlayerName': null,
+      'pkStatus':           'waiting',
+      'pkHostPlayerId':     null,
+      'pkHostPlayerName':   null,
+      'pkHostPlayerAvatar': null,
+      'pkRedPlayerId':      null,
+      'pkRedPlayerName':    null,
+      'pkRedPlayerAvatar':  null,
+      'pkBluePlayerId':     null,
+      'pkBluePlayerName':   null,
       'pkBluePlayerAvatar': null,
-      'pkRedScore':      0,
-      'pkBlueScore':     0,
-      'pkEndsAt':        null,
-      'pkWinnerId':      null,
-      'pkDurationSecs':  durationSecs,
+      'pkRedScore':         0,
+      'pkBlueScore':        0,
+      'pkEndsAt':           null,
+      'pkWinnerId':         null,
+      'pkDurationSecs':     durationSecs,
     });
   }
 
-  // Atomic: claim red chair (returns true if succeeded)
+  // Atomic join: clears user from other PK seats, claims the target seat.
+  // side = 'host' | 'red' | 'blue'
+  // Returns true if seat was claimed successfully.
+  Future<bool> _joinPkSeat(
+    String roomId,
+    String side,
+    String userId,
+    String userName,
+    String? userAvatar,
+  ) async {
+    final ref = _db.collection('rooms').doc(roomId);
+    bool joined = false;
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final d = snap.data() ?? {};
+      final status = d['pkStatus'] as String? ?? 'idle';
+      if (status != 'waiting') return;
+
+      String cap(String s) => s[0].toUpperCase() + s.substring(1);
+
+      // Check target seat
+      final targetId = d['pk${cap(side)}PlayerId'] as String?;
+      if (targetId != null && targetId != userId) return; // occupied by someone else
+      if (targetId == userId) { joined = true; return; } // already on this seat
+
+      // Build update: remove user from any other PK seat they occupy
+      final update = <String, dynamic>{};
+      for (final s in ['host', 'red', 'blue']) {
+        if (s == side) continue;
+        if ((d['pk${cap(s)}PlayerId'] as String?) == userId) {
+          update['pk${cap(s)}PlayerId']     = null;
+          update['pk${cap(s)}PlayerName']   = null;
+          update['pk${cap(s)}PlayerAvatar'] = null;
+        }
+      }
+
+      // Set user on target seat
+      update['pk${cap(side)}PlayerId']     = userId;
+      update['pk${cap(side)}PlayerName']   = userName;
+      update['pk${cap(side)}PlayerAvatar'] = userAvatar;
+
+      tx.update(ref, update);
+      joined = true;
+    });
+    return joined;
+  }
+
+  Future<bool> joinPkHost(String roomId, {
+    required String userId,
+    required String userName,
+    String? userAvatar,
+  }) => _joinPkSeat(roomId, 'host', userId, userName, userAvatar);
+
   Future<bool> joinPkRed(String roomId, {
     required String userId,
     required String userName,
     String? userAvatar,
-  }) async {
-    final ref = _db.collection('rooms').doc(roomId);
-    bool joined = false;
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      final d = snap.data() ?? {};
-      if ((d['pkStatus'] as String?) != 'waiting') return;
-      if ((d['pkRedPlayerId'] as String?) != null) return;
-      if ((d['pkBluePlayerId'] as String?) == userId) return;
-      tx.update(ref, {
-        'pkRedPlayerId':    userId,
-        'pkRedPlayerName':  userName,
-        'pkRedPlayerAvatar': userAvatar,
-      });
-      joined = true;
-    });
-    return joined;
-  }
+  }) => _joinPkSeat(roomId, 'red', userId, userName, userAvatar);
 
-  // Atomic: claim blue chair (returns true if succeeded)
   Future<bool> joinPkBlue(String roomId, {
     required String userId,
     required String userName,
     String? userAvatar,
-  }) async {
-    final ref = _db.collection('rooms').doc(roomId);
-    bool joined = false;
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      final d = snap.data() ?? {};
-      if ((d['pkStatus'] as String?) != 'waiting') return;
-      if ((d['pkBluePlayerId'] as String?) != null) return;
-      if ((d['pkRedPlayerId'] as String?) == userId) return;
-      tx.update(ref, {
-        'pkBluePlayerId':    userId,
-        'pkBluePlayerName':  userName,
-        'pkBluePlayerAvatar': userAvatar,
-      });
-      joined = true;
-    });
-    return joined;
+  }) => _joinPkSeat(roomId, 'blue', userId, userName, userAvatar);
+
+  // Clears the user from whichever PK seat they currently occupy.
+  Future<void> leavePkSeat(String roomId, String userId) async {
+    final snap = await _db.collection('rooms').doc(roomId).get();
+    final d = snap.data() ?? {};
+    final update = <String, dynamic>{};
+    for (final side in ['Host', 'Red', 'Blue']) {
+      if ((d['pk${side}PlayerId'] as String?) == userId) {
+        update['pk${side}PlayerId']     = null;
+        update['pk${side}PlayerName']   = null;
+        update['pk${side}PlayerAvatar'] = null;
+      }
+    }
+    if (update.isNotEmpty) {
+      await _db.collection('rooms').doc(roomId).update(update);
+    }
   }
 
   Future<void> activatePk(String roomId, int durationSecs) async {
@@ -328,49 +365,38 @@ class RoomStateRepository {
     });
   }
 
-  Future<void> finishPk(String roomId, {required int redScore, required int blueScore}) async {
+  Future<void> finishPk(String roomId,
+      {required int redScore, required int blueScore}) async {
     final ref = _db.collection('rooms').doc(roomId);
     await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
-      final currentStatus = (snap.data()?['pkStatus'] as String?) ?? 'idle';
-      if (currentStatus != 'active') return;
+      if ((snap.data()?['pkStatus'] as String?) != 'active') return;
       final winner = redScore > blueScore
           ? 'red'
-          : blueScore > redScore ? 'blue' : 'draw';
+          : blueScore > redScore
+              ? 'blue'
+              : 'draw';
       tx.update(ref, {'pkStatus': 'finished', 'pkWinnerId': winner});
     });
   }
 
   Future<void> resetPk(String roomId) async {
     await _db.collection('rooms').doc(roomId).update({
-      'pkStatus':          'idle',
-      'pkRedPlayerId':     null,
-      'pkRedPlayerName':   null,
-      'pkRedPlayerAvatar': null,
-      'pkBluePlayerId':    null,
-      'pkBluePlayerName':  null,
-      'pkBluePlayerAvatar':null,
-      'pkRedScore':        0,
-      'pkBlueScore':       0,
-      'pkEndsAt':          null,
-      'pkWinnerId':        null,
+      'pkStatus':           'idle',
+      'pkHostPlayerId':     null,
+      'pkHostPlayerName':   null,
+      'pkHostPlayerAvatar': null,
+      'pkRedPlayerId':      null,
+      'pkRedPlayerName':    null,
+      'pkRedPlayerAvatar':  null,
+      'pkBluePlayerId':     null,
+      'pkBluePlayerName':   null,
+      'pkBluePlayerAvatar': null,
+      'pkRedScore':         0,
+      'pkBlueScore':        0,
+      'pkEndsAt':           null,
+      'pkWinnerId':         null,
     });
-  }
-
-  Future<void> leavePkChair(String roomId, String side) async {
-    if (side == 'red') {
-      await _db.collection('rooms').doc(roomId).update({
-        'pkRedPlayerId':    null,
-        'pkRedPlayerName':  null,
-        'pkRedPlayerAvatar': null,
-      });
-    } else {
-      await _db.collection('rooms').doc(roomId).update({
-        'pkBluePlayerId':    null,
-        'pkBluePlayerName':  null,
-        'pkBluePlayerAvatar': null,
-      });
-    }
   }
 
 }
