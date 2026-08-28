@@ -63,6 +63,25 @@ class GiftRepository {
         });
       } catch (_) {}
 
+      // تحديث نقاط PK إذا كانت المباراة نشطة والمستقبِل أحد اللاعبين
+      if (receiverId != null) {
+        try {
+          final roomSnap = await _db.collection('rooms').doc(roomId).get();
+          final rd = roomSnap.data() ?? {};
+          if ((rd['pkStatus'] as String?) == 'active') {
+            if (receiverId == rd['pkRedPlayerId']) {
+              await _db.collection('rooms').doc(roomId).update({
+                'pkRedScore': FieldValue.increment(totalDiamonds),
+              });
+            } else if (receiverId == rd['pkBluePlayerId']) {
+              await _db.collection('rooms').doc(roomId).update({
+                'pkBlueScore': FieldValue.increment(totalDiamonds),
+              });
+            }
+          }
+        } catch (_) {}
+      }
+
       // تحديث إجمالي ما أرسله المستخدم من هدايا
       try {
         await _db.collection('users').doc(senderId).update({

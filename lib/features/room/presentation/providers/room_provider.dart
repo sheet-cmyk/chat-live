@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/seat_model.dart';
 import '../../data/models/room_message_model.dart';
+import '../../data/models/pk_model.dart';
 import '../../data/repositories/room_state_repository.dart';
 import '../../../home/data/models/room_model.dart';
 
@@ -308,4 +309,11 @@ final userTotalSentProvider = StreamProvider.family<int, String>((ref, userId) {
       .doc(userId)
       .snapshots()
       .map((doc) => (doc.data()?['totalGiftsSent'] as num?)?.toInt() ?? 0);
+});
+
+// ── حالة PK Challenge في الغرفة ──────────────────────────────────
+final pkProvider = StreamProvider.family<PkModel, String>((ref, roomId) {
+  return RoomStateRepository()
+      .watchPkRaw(roomId)
+      .map(PkModel.fromDoc);
 });

@@ -34,6 +34,8 @@ import '../widgets/user_profile_sheet.dart';
 import '../widgets/room_announcement_banner.dart';
 import '../widgets/night_sky_background.dart';
 import '../widgets/sound_effects_panel.dart';
+import '../widgets/pk_battle_widget.dart';
+import '../../data/models/pk_model.dart';
 import '../../../admin/presentation/providers/admin_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../app/theme/chat_colors.dart';
@@ -739,6 +741,17 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
                 // شريط الهدايا (يظهر فقط عند التفعيل)
                 _GiftBar(roomId: _roomId),
+
+                // PK Challenge (يظهر عند التفعيل)
+                PkBattleWidget(
+                  roomId:           _roomId,
+                  isHost:           widget.room.hostUid == _currentUser?.uid,
+                  currentUserId:    _currentUser?.uid,
+                  currentUserName:  _currentUser?.displayName,
+                  currentUserAvatar:_currentUser?.photoURL,
+                  hostName:         widget.room.hostName,
+                  hostAvatar:       widget.room.hostAvatar,
+                ),
 
                 // شبكة المقاعد
                 Padding(
@@ -1692,6 +1705,7 @@ class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
   @override
   Widget build(BuildContext context) {
     final giftBarActive = ref.watch(giftBarActiveProvider(widget.roomId)).valueOrNull ?? false;
+    final pk = ref.watch(pkProvider(widget.roomId)).valueOrNull ?? const PkModel();
     final currentMax = ref.watch(roomMaxSeatsProvider(widget.roomId)).valueOrNull ?? 9;
     return DraggableScrollableSheet(
       expand: false,
@@ -1755,6 +1769,19 @@ class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
                 await RoomStateRepository().deactivateGiftBar(widget.roomId);
               } else {
                 await RoomStateRepository().activateGiftBar(widget.roomId);
+              }
+            },
+          ),
+          _MenuTile(
+            icon: pk.isIdle ? Icons.sports_kabaddi_rounded : Icons.stop_rounded,
+            label: pk.isIdle ? 'تفعيل مباراة PK ⚔️' : 'إنهاء / إعادة تعيين PK ⚔️',
+            color: const Color(0xFF7B1FA2),
+            onTap: () async {
+              Navigator.pop(context);
+              if (pk.isIdle) {
+                await RoomStateRepository().startPkWaiting(widget.roomId, durationSecs: 300);
+              } else {
+                await RoomStateRepository().resetPk(widget.roomId);
               }
             },
           ),

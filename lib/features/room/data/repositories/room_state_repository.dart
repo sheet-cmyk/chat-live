@@ -247,4 +247,130 @@ class RoomStateRepository {
     });
   }
 
+  // ── PK Challenge ──────────────────────────────────────────────────────────
+
+  Stream<Map<String, dynamic>> watchPkRaw(String roomId) {
+    return _db.collection('rooms').doc(roomId).snapshots().map(
+      (doc) => doc.data() ?? {},
+    );
+  }
+
+  Future<void> startPkWaiting(String roomId, {int durationSecs = 300}) async {
+    await _db.collection('rooms').doc(roomId).update({
+      'pkStatus':        'waiting',
+      'pkRedPlayerId':   null,
+      'pkRedPlayerName': null,
+      'pkRedPlayerAvatar': null,
+      'pkBluePlayerId':  null,
+      'pkBluePlayerName': null,
+      'pkBluePlayerAvatar': null,
+      'pkRedScore':      0,
+      'pkBlueScore':     0,
+      'pkEndsAt':        null,
+      'pkWinnerId':      null,
+      'pkDurationSecs':  durationSecs,
+    });
+  }
+
+  // Atomic: claim red chair (returns true if succeeded)
+  Future<bool> joinPkRed(String roomId, {
+    required String userId,
+    required String userName,
+    String? userAvatar,
+  }) async {
+    final ref = _db.collection('rooms').doc(roomId);
+    bool joined = false;
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final d = snap.data() ?? {};
+      if ((d['pkStatus'] as String?) != 'waiting') return;
+      if ((d['pkRedPlayerId'] as String?) != null) return;
+      if ((d['pkBluePlayerId'] as String?) == userId) return;
+      tx.update(ref, {
+        'pkRedPlayerId':    userId,
+        'pkRedPlayerName':  userName,
+        'pkRedPlayerAvatar': userAvatar,
+      });
+      joined = true;
+    });
+    return joined;
+  }
+
+  // Atomic: claim blue chair (returns true if succeeded)
+  Future<bool> joinPkBlue(String roomId, {
+    required String userId,
+    required String userName,
+    String? userAvatar,
+  }) async {
+    final ref = _db.collection('rooms').doc(roomId);
+    bool joined = false;
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final d = snap.data() ?? {};
+      if ((d['pkStatus'] as String?) != 'waiting') return;
+      if ((d['pkBluePlayerId'] as String?) != null) return;
+      if ((d['pkRedPlayerId'] as String?) == userId) return;
+      tx.update(ref, {
+        'pkBluePlayerId':    userId,
+        'pkBluePlayerName':  userName,
+        'pkBluePlayerAvatar': userAvatar,
+      });
+      joined = true;
+    });
+    return joined;
+  }
+
+  Future<void> activatePk(String roomId, int durationSecs) async {
+    final endsAt = DateTime.now().add(Duration(seconds: durationSecs));
+    await _db.collection('rooms').doc(roomId).update({
+      'pkStatus': 'active',
+      'pkEndsAt': Timestamp.fromDate(endsAt),
+    });
+  }
+
+  Future<void> finishPk(String roomId, {required int redScore, required int blueScore}) async {
+    final ref = _db.collection('rooms').doc(roomId);
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final currentStatus = (snap.data()?['pkStatus'] as String?) ?? 'idle';
+      if (currentStatus != 'active') return;
+      final winner = redScore > blueScore
+          ? 'red'
+          : blueScore > redScore ? 'blue' : 'draw';
+      tx.update(ref, {'pkStatus': 'finished', 'pkWinnerId': winner});
+    });
+  }
+
+  Future<void> resetPk(String roomId) async {
+    await _db.collection('rooms').doc(roomId).update({
+      'pkStatus':          'idle',
+      'pkRedPlayerId':     null,
+      'pkRedPlayerName':   null,
+      'pkRedPlayerAvatar': null,
+      'pkBluePlayerId':    null,
+      'pkBluePlayerName':  null,
+      'pkBluePlayerAvatar':null,
+      'pkRedScore':        0,
+      'pkBlueScore':       0,
+      'pkEndsAt':          null,
+      'pkWinnerId':        null,
+    });
+  }
+
+  Future<void> leavePkChair(String roomId, String side) async {
+    if (side == 'red') {
+      await _db.collection('rooms').doc(roomId).update({
+        'pkRedPlayerId':    null,
+        'pkRedPlayerName':  null,
+        'pkRedPlayerAvatar': null,
+      });
+    } else {
+      await _db.collection('rooms').doc(roomId).update({
+        'pkBluePlayerId':    null,
+        'pkBluePlayerName':  null,
+        'pkBluePlayerAvatar': null,
+      });
+    }
+  }
+
 }
