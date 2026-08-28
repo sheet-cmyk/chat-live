@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "699687299124-l4gsm76g86mvp2btvhdre91sd63rk45o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.partyhub.party_hub",
+            "certificate_hash": "4f3c7c9a2f6baa0c0e026e4f618e37069c8973ff"
+          }
+        },
+        {
           "client_id": "699687299124-sa7blarhs3l2ekjmib1un3r2csrd0rhc.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
