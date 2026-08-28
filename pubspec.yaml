@@ -81,6 +81,7 @@ dependencies:
   # WebView (for web-based games)
   webview_flutter: ^4.10.0
 
+
   # In-App Purchase (Phase 5B)
   # in_app_purchase: ^3.2.0          # add in Phase 5B
 
@@ -124,6 +125,7 @@ flutter:
     - assets/icons/
     - assets/animations/
     - assets/sounds/
+    - assets/pk/
     - assets/sweet_bonanza/images/
     - assets/sweet_bonanza/images/backgrounds/
     - assets/sweet_bonanza/images/symbols/
@@ -133,3 +135,4 @@ flutter:
     - assets/game-assets/dice/
     - assets/game-assets/chips/
     - assets/game-assets/ui/
+    - assets/pk/

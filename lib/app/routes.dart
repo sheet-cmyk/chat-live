@@ -3,8 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
-import '../features/auth/presentation/screens/otp_screen.dart';
-import '../features/auth/presentation/screens/register_screen.dart';
 import '../features/auth/presentation/screens/setup_profile_screen.dart';
 import '../features/auth/presentation/providers/auth_provider.dart';
 import '../features/home/presentation/screens/main_screen.dart';
@@ -32,8 +30,6 @@ final pendingDailyCoinsProvider = StateProvider<int>((_) => 0);
 class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
-  static const String otp = '/otp';
-  static const String register = '/register';
   static const String home = '/home';
   static const String room = '/room';
   static const String chat = '/chat';
@@ -62,8 +58,6 @@ GoRouter createAppRouter(WidgetRef ref) {
       final authState = ref.read(authStateProvider);
       final isLoggedIn = authState.valueOrNull != null;
       final isOnAuthPage = state.matchedLocation == AppRoutes.login ||
-          state.matchedLocation == AppRoutes.otp ||
-          state.matchedLocation == AppRoutes.register ||
           state.matchedLocation == AppRoutes.splash;
 
       if (!isLoggedIn && !isOnAuthPage) return AppRoutes.login;
@@ -79,24 +73,14 @@ GoRouter createAppRouter(WidgetRef ref) {
         builder: (context, state) => const LoginScreen(),
       ),
       GoRoute(
-        path: AppRoutes.otp,
-        builder: (context, state) => const OtpScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.register,
-        builder: (context, state) => const RegisterScreen(),
-      ),
-      GoRoute(
         path: AppRoutes.home,
-        builder: (context, state) => const Scaffold(
-          body: Center(child: Text('الشاشة الرئيسية - المرحلة 3A', style: TextStyle(color: Colors.white))),
-        ),
+        builder: (context, state) => const MainScreen(),
       ),
     ],
   );
 }
 
-// Router بسيط بدون Auth Guard للمرحلة الحالية
+// Router الرئيسي
 final GoRouter appRouter = GoRouter(
   initialLocation: AppRoutes.splash,
   routes: [
@@ -107,14 +91,6 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.login,
       builder: (context, state) => const LoginScreen(),
-    ),
-    GoRoute(
-      path: AppRoutes.otp,
-      builder: (context, state) => const OtpScreen(),
-    ),
-    GoRoute(
-      path: AppRoutes.register,
-      builder: (context, state) => const RegisterScreen(),
     ),
     GoRoute(
       path: AppRoutes.home,

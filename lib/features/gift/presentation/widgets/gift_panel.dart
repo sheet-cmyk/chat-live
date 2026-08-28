@@ -312,23 +312,6 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
     final room = ref.read(currentRoomProvider);
     if (me == null || room == null) return;
 
-    // تحديد فريق PK للمستلم إذا كانت معركة PK نشطة
-    String? pkTeam;
-    if (widget.roomId != null && _selectedUserId != null) {
-      final pk = ref.read(pkStateProvider(widget.roomId!)).valueOrNull;
-      if (pk != null && pk.active && !pk.timeUp) {
-        final allSeats = ref.read(seatsProvider(widget.roomId!));
-        final maxSeats = ref.read(roomMaxSeatsProvider(widget.roomId!)).valueOrNull ?? allSeats.length;
-        final recvSeat = allSeats.firstWhere(
-          (s) => s.userId == _selectedUserId,
-          orElse: () => const SeatModel(index: -1),
-        );
-        if (recvSeat.index >= 0) {
-          pkTeam = recvSeat.index < maxSeats ~/ 2 ? 'A' : 'B';
-        }
-      }
-    }
-
     ref.read(sendingGiftProvider.notifier).state = true;
     try {
       final ok = await ref.read(giftRepositoryProvider).sendGift(
@@ -340,7 +323,7 @@ class _GiftPanelState extends ConsumerState<GiftPanel>
         receiverName: _selectedUserName,
         gift: gift,
         quantity: _quantity,
-        pkTeam: pkTeam,
+        pkTeam: null,
       );
 
       if (ok && mounted) {

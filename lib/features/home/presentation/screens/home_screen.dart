@@ -8,7 +8,7 @@ import '../../../../app/routes.dart';
 import '../providers/home_provider.dart';
 import '../widgets/room_card.dart';
 import '../widgets/category_tabs.dart';
-import '../widgets/promo_banner.dart';
+import '../../../banner/presentation/widgets/firebase_banner.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -115,7 +115,7 @@ class HomeScreen extends ConsumerWidget {
                   const SliverToBoxAdapter(
                     child: Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
-                      child: PromoBanner(),
+                      child: FirebaseBanner(),
                     ),
                   ),
 
@@ -360,7 +360,7 @@ class _EmptyRooms extends StatelessWidget {
         children: [
           Container(
             width: 80, height: 80,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.surfaceLight,
               shape: BoxShape.circle,
             ),

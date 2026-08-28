@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/seat_model.dart';
 import '../models/room_message_model.dart';
-import '../models/pk_state.dart';
 
 class RoomStateRepository {
   static final RoomStateRepository _i = RoomStateRepository._();
@@ -235,59 +234,17 @@ class RoomStateRepository {
     );
   }
 
-  Future<void> activateChallenge(String roomId, DateTime endTime) async {
+  Future<void> activateGiftBar(String roomId) async {
     await _db.collection('rooms').doc(roomId).update({
       'challengeActive': true,
-      'challengeEndTime': Timestamp.fromDate(endTime),
-      'challengeGiftTotal': 0,  // إعادة ضبط عداد الهدايا عند كل تحدي جديد
+      'challengeGiftTotal': 0,
     });
   }
 
-  Future<void> deactivateChallenge(String roomId) async {
+  Future<void> deactivateGiftBar(String roomId) async {
     await _db.collection('rooms').doc(roomId).update({
       'challengeActive': false,
-      'challengeEndTime': FieldValue.delete(),
     });
   }
 
-  // ── PK Battle ─────────────────────────────────────────────────
-  Future<void> startPK(String roomId, int durationMinutes) async {
-    final end = DateTime.now().add(Duration(minutes: durationMinutes));
-    await _db.collection('rooms').doc(roomId).update({
-      'pkActive': true,
-      'pkEndTime': Timestamp.fromDate(end),
-      'pkTeamA': 0,
-      'pkTeamB': 0,
-    });
-  }
-
-  Future<void> stopPK(String roomId) async {
-    await _db.collection('rooms').doc(roomId).update({
-      'pkActive': false,
-      'pkEndTime': FieldValue.delete(),
-      'pkTeamA': 0,
-      'pkTeamB': 0,
-    });
-  }
-
-  Stream<PKState?> watchPKState(String roomId) {
-    return _db.collection('rooms').doc(roomId).snapshots().map((doc) {
-      final d = doc.data();
-      if (d == null || d['pkActive'] != true) return null;
-      return PKState(
-        active: true,
-        endTime: (d['pkEndTime'] as Timestamp?)?.toDate(),
-        teamA: (d['pkTeamA'] as num?)?.toInt() ?? 0,
-        teamB: (d['pkTeamB'] as num?)?.toInt() ?? 0,
-      );
-    });
-  }
-
-  Future<void> addPKDiamonds(String roomId, String team, int amount) async {
-    try {
-      await _db.collection('rooms').doc(roomId).update({
-        'pkTeam$team': FieldValue.increment(amount),
-      });
-    } catch (_) {}
-  }
 }

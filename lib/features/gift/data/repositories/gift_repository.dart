@@ -63,15 +63,6 @@ class GiftRepository {
         });
       } catch (_) {}
 
-      // تحديث نقاط PK إذا كانت المعركة نشطة
-      if (pkTeam != null) {
-        try {
-          await _db.collection('rooms').doc(roomId).update({
-            'pkTeam$pkTeam': FieldValue.increment(totalDiamonds),
-          });
-        } catch (_) {}
-      }
-
       // تحديث إجمالي ما أرسله المستخدم من هدايا
       try {
         await _db.collection('users').doc(senderId).update({

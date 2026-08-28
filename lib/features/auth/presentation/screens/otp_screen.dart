@@ -171,7 +171,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       if (err != null) {
         _showError(err);
       } else {
-        context.push(AppRoutes.register);
+        context.go(AppRoutes.setupProfile);
       }
     }
   }

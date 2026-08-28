@@ -6,6 +6,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../data/repositories/admin_repository.dart';
 import '../../../wallet/presentation/providers/wallet_provider.dart';
 import '../../../game/data/repositories/greedy_star_repository.dart';
+import '../../../banner/presentation/screens/banner_admin_screen.dart';
 
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({super.key});
@@ -23,7 +24,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _tab = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -59,6 +60,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
             Tab(icon: Icon(Icons.people_rounded, size: 18), text: 'المستخدمون'),
             Tab(icon: Icon(Icons.meeting_room_rounded, size: 18), text: 'الغرف'),
             Tab(icon: Icon(Icons.casino_rounded, size: 18), text: 'اللعبة 🎮'),
+            Tab(icon: Icon(Icons.image_rounded, size: 18), text: 'البنرات 🖼️'),
           ],
         ),
       ),
@@ -72,6 +74,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
                 _UsersTab(search: _searchText, searchCtrl: _search, onSearch: (v) => setState(() => _searchText = v)),
                 const _RoomsTab(),
                 const _GreedyStarTab(),
+                const BannerAdminScreen(),
               ],
             ),
           ),

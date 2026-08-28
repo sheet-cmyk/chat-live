@@ -3,11 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/seat_model.dart';
 import '../../data/models/room_message_model.dart';
-import '../../data/models/pk_state.dart';
 import '../../data/repositories/room_state_repository.dart';
 import '../../../home/data/models/room_model.dart';
-
-export '../../data/models/pk_state.dart';
 
 // بيانات الراسل الأعلى في لوحة الهدايا
 class GiftLeader {
@@ -242,7 +239,16 @@ final userGiftDiamondsProvider = StreamProvider.family<int, String>((ref, userId
       });
 });
 
-// ── إجمالي ماسات الهدايا خلال التحدي ────────────────────────────────
+// ── شريط الهدايا: هل هو نشط؟ ─────────────────────────────────────
+final giftBarActiveProvider = StreamProvider.family<bool, String>((ref, roomId) {
+  return FirebaseFirestore.instance
+      .collection('rooms')
+      .doc(roomId)
+      .snapshots()
+      .map((doc) => doc.data()?['challengeActive'] as bool? ?? false);
+});
+
+// ── إجمالي هدايا شريط الهدايا ─────────────────────────────────────
 final challengeGiftTotalProvider = StreamProvider.family<int, String>((ref, roomId) {
   return FirebaseFirestore.instance
       .collection('rooms')
@@ -254,20 +260,6 @@ final challengeGiftTotalProvider = StreamProvider.family<int, String>((ref, room
       });
 });
 
-// ── وقت انتهاء التحدي (null = لا يوجد تحدي نشط) ───────────────────
-final challengeEndTimeProvider = StreamProvider.family<DateTime?, String>((ref, roomId) {
-  return FirebaseFirestore.instance
-      .collection('rooms')
-      .doc(roomId)
-      .snapshots()
-      .map((doc) {
-        final data = doc.data();
-        if (data == null || data['challengeActive'] != true) return null;
-        final ts = data['challengeEndTime'] as Timestamp?;
-        return ts?.toDate();
-      });
-});
-
 // ── عدد الزوار الحاليين (من subcollection members) ───────────────
 final memberCountProvider = StreamProvider.family<int, String>((ref, roomId) {
   return RoomStateRepository().watchMemberCount(roomId);
@@ -276,11 +268,6 @@ final memberCountProvider = StreamProvider.family<int, String>((ref, roomId) {
 // ── قائمة الزوار الحاليين ─────────────────────────────────────
 final roomMembersProvider = StreamProvider.family<List<Map<String, dynamic>>, String>((ref, roomId) {
   return RoomStateRepository().watchMembers(roomId);
-});
-
-// ── حالة PK Battle (null = لا يوجد PK نشط) ──────────────────────
-final pkStateProvider = StreamProvider.family<PKState?, String>((ref, roomId) {
-  return RoomStateRepository().watchPKState(roomId);
 });
 
 // ── إجمالي هدايا الغرفة (لحساب مستوى الغرفة) ─────────────────────

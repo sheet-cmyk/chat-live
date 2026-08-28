@@ -7,7 +7,6 @@ import '../../../../app/theme/app_colors.dart';
 import '../../data/repositories/room_state_repository.dart';
 import '../providers/room_provider.dart';
 import '../../../admin/data/repositories/admin_repository.dart';
-import '../../../gift/presentation/widgets/gift_panel.dart';
 
 class UserProfileSheet extends ConsumerStatefulWidget {
   const UserProfileSheet({

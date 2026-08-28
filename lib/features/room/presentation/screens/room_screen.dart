@@ -34,7 +34,6 @@ import '../widgets/user_profile_sheet.dart';
 import '../widgets/room_announcement_banner.dart';
 import '../widgets/night_sky_background.dart';
 import '../widgets/sound_effects_panel.dart';
-import '../widgets/pk_bar.dart';
 import '../../../admin/presentation/providers/admin_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../app/theme/chat_colors.dart';
@@ -130,6 +129,8 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
 
       // mic stays muted until user takes a seat
       ref.read(isMicMutedProvider.notifier).state = true;
+      // reset speaker-mute UI so new room always starts with audio on
+      ref.read(isRoomAudioMutedProvider.notifier).state = false;
 
       await zego.startSoundLevelMonitor();
 
@@ -579,10 +580,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     final messages = messagesAsync.valueOrNull ?? [];
     final isHost = ref.watch(isHostProvider);
     final isAdmin = ref.watch(isAdminProvider).valueOrNull == true;
-    final challengeActive = ref.watch(challengeEndTimeProvider(_roomId)).valueOrNull != null;
-    final pk = ref.watch(pkStateProvider(_roomId)).valueOrNull;
-    final pkActive = pk != null && pk.active;
-    final maxSeats = ref.watch(roomMaxSeatsProvider(_roomId)).valueOrNull ?? seats.length;
+    ref.watch(roomMaxSeatsProvider(_roomId)); // keep subscription active for seat count updates
 
     // ── امسح الـ patches بعد تأكيد Firestore ─────────────────────────
     ref.listen(roomSeatsStreamProvider(_roomId), (_, __) {
@@ -606,12 +604,10 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       if (uid == null) return;
 
       if (mySeatData.isEmpty || mySeatData.userId != uid) {
-        // Kicked by host — reset local state and mute mic.
+        // Kicked by host — stop broadcasting and reset local state.
         ref.read(myCurrentSeatProvider.notifier).state = -1;
-        if (!ref.read(isMicMutedProvider)) {
-          ref.read(isMicMutedProvider.notifier).state = true;
-          ZegoService().setMicMuted(true);
-        }
+        ZegoService().stopPublishing();
+        ref.read(isMicMutedProvider.notifier).state = true;
         return;
       }
 
@@ -741,43 +737,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                   onSettings: () => _showSettings(context),
                 ),
 
-                // شريط هدايا التحدي (يظهر فقط عند وجود تحدي نشط)
-                _ChallengeGiftBar(roomId: _roomId),
-
-                // شريط PK Battle
-                PKBar(roomId: _roomId, isHost: isHost),
+                // شريط الهدايا (يظهر فقط عند التفعيل)
+                _GiftBar(roomId: _roomId),
 
                 // شبكة المقاعد
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: challengeActive
-                      ? _buildTeamBattleLayout(seats)
-                      : GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: _seatColumns(seats.length),
-                            mainAxisSpacing: 8,
-                            crossAxisSpacing: 4,
-                            childAspectRatio: 0.62,
-                          ),
-                          itemCount: seats.length,
-                          itemBuilder: (_, i) {
-                            final seat = seats[i];
-                            final pkTeam = pkActive
-                                ? (seat.index < maxSeats ~/ 2 ? 1 : 2)
-                                : 0;
-                            return SeatWidget(
-                              seat: seat,
-                              isHost: false,
-                              isMe: seat.userId == _currentUser?.uid,
-                              onTap: () => _onSeatTap(seat),
-                              emojiTrigger: _seatEmoji[seat.index],
-                              challengeActive: challengeActive,
-                              pkTeam: pkTeam,
-                            );
-                          },
-                        ),
+                  child: _buildSeatGrid(seats),
                 ),
 
                 // بانر الإعلان
@@ -822,120 +788,113 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     ));
   }
 
-  int _seatColumns(int count) {
-    if (count <= 3) return 3;
-    if (count <= 5) return 5;
-    if (count <= 10) return 5;
-    return 5;
+  // ── Adaptive seat grid ──────────────────────────────────────────────────────
+  //
+  // count ≤ 5  : 1 (top, host-sized) + up-to-4 (bottom row)        — largest seats
+  // count ≤ 9  : 1 (top, host-sized) + two rows of 4               — slightly smaller
+  // count ≤ 12 : 2 (top, centered)   + two rows of 5               — smaller
+  // count > 12 : N rows of 5 (15 / 20 / 30 …)                      — smallest
+  //
+  Widget _buildSeatGrid(List<SeatModel> seats) {
+    if (seats.isEmpty) return const SizedBox.shrink();
+    return LayoutBuilder(builder: (_, c) {
+      final avail = c.maxWidth;
+      const gap   = 4.0;
+      final count = seats.length;
+
+      // target seat width per layout tier
+      final double seatW;
+      if (count <= 5) {
+        seatW = (avail - 3 * gap) / 4;           // 4-col (largest)
+      } else if (count <= 9) {
+        seatW = (avail - 3 * gap) / 4 * 0.96;   // 4-col, 4 % smaller than 5-mic
+      } else if (count <= 12) {
+        seatW = (avail - 4 * gap) / 5;           // 5-col full width
+      } else if (count <= 15) {
+        seatW = (avail - 4 * gap) / 5;           // ≈ 12-mic (same)
+      } else if (count <= 20) {
+        seatW = (avail - 4 * gap) / 5 * 0.97;   // ≈ 15-mic (slightly smaller)
+      } else {
+        seatW = (avail - 4 * gap) / 5 * 0.87;   // 30 mics — smallest
+      }
+
+      Widget row(List<SeatModel> rowSeats) => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: rowSeats.map((s) => _seat(s, seatW)).toList(),
+      );
+
+      if (count <= 5) {
+        final hostW = seatW * 1.15;
+        return Column(mainAxisSize: MainAxisSize.min, children: [
+          Center(child: _seat(seats[0], hostW, isHost: true)),
+          const SizedBox(height: 6),
+          row(seats.sublist(1)),
+        ]);
+      }
+
+      if (count <= 9) {
+        final hostW = seatW * 1.12;
+        final rest  = seats.sublist(1);
+        final half  = (rest.length / 2).ceil();
+        return Column(mainAxisSize: MainAxisSize.min, children: [
+          Center(child: _seat(seats[0], hostW, isHost: true)),
+          const SizedBox(height: 6),
+          row(rest.sublist(0, half)),
+          const SizedBox(height: 6),
+          row(rest.sublist(half)),
+        ]);
+      }
+
+      if (count <= 12) {
+        final top  = seats.sublist(0, 2);
+        final rest = seats.sublist(2);
+        final half = (rest.length / 2).ceil();
+        return Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: top.map((s) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: gap / 2),
+              child: _seat(s, seatW),
+            )).toList(),
+          ),
+          const SizedBox(height: 6),
+          row(rest.sublist(0, half)),
+          const SizedBox(height: 6),
+          if (rest.length > half) row(rest.sublist(half)),
+        ]);
+      }
+
+      // 15 / 20 / 30 : rows of 5
+      final rows = <Widget>[];
+      for (int i = 0; i < count; i += 5) {
+        if (i > 0) rows.add(const SizedBox(height: 6));
+        final end = (i + 5).clamp(i, count);
+        rows.add(row(seats.sublist(i, end)));
+      }
+      return Column(mainAxisSize: MainAxisSize.min, children: rows);
+    });
   }
 
-  Widget _buildTeamBattleLayout(List<SeatModel> seats) {
-    if (seats.isEmpty) return const SizedBox.shrink();
-
-    const deepBlue = Color(0xFF0A1EA8);
-    const deepRed  = Color(0xFFA80A0A);
-
-    final hostSeat = seats[0];
-    final rest     = seats.length > 1 ? seats.sublist(1) : const <SeatModel>[];
-    final half     = (rest.length / 2).ceil();
-    final teamA    = rest.sublist(0, half);
-    final teamB    = half < rest.length ? rest.sublist(half) : const <SeatModel>[];
-    final rowCount = ((teamA.length > teamB.length ? teamA.length : teamB.length) / 2).ceil();
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // مقعد المضيف في المنتصف
-        SeatWidget(
-          seat: hostSeat,
-          isHost: true,
-          isMe: hostSeat.userId == _currentUser?.uid,
-          onTap: () => _onSeatTap(hostSeat),
-          emojiTrigger: _seatEmoji[hostSeat.index],
-          challengeActive: true,
+  // Scale SeatWidget to fit a target width.
+  // Width is constrained; height is unrestricted (avoids overflow errors).
+  Widget _seat(SeatModel s, double targetW, {bool isHost = false}) {
+    final nW = isHost ? 92.0 : 80.0;
+    final sc = (targetW / nW).clamp(0.45, 1.6);
+    return SizedBox(
+      width: targetW,
+      child: Transform.scale(
+        scale: sc,
+        alignment: Alignment.topCenter,
+        child: SeatWidget(
+          seat: s,
+          isHost: isHost,
+          isMe: s.userId == _currentUser?.uid,
+          onTap: () => _onSeatTap(s),
+          emojiTrigger: _seatEmoji[s.index],
+          challengeActive: false,
           pkTeam: 0,
         ),
-        const SizedBox(height: 8),
-        if (rest.isNotEmpty) ...[
-          Row(
-            children: [
-              Expanded(
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                    decoration: BoxDecoration(color: deepBlue, borderRadius: BorderRadius.circular(20)),
-                    child: const Text('💙 أزرق', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                    decoration: BoxDecoration(color: deepRed, borderRadius: BorderRadius.circular(20)),
-                    child: const Text('❤️ أحمر', style: TextStyle(color: Colors.white, fontFamily: 'Cairo', fontSize: 10, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ...List.generate(rowCount, (rowIdx) {
-            final aStart = rowIdx * 2;
-            final bStart = rowIdx * 2;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        for (int c = 0; c < 2; c++)
-                          if (aStart + c < teamA.length)
-                            SeatWidget(
-                              seat: teamA[aStart + c],
-                              isHost: false,
-                              isMe: teamA[aStart + c].userId == _currentUser?.uid,
-                              onTap: () => _onSeatTap(teamA[aStart + c]),
-                              emojiTrigger: _seatEmoji[teamA[aStart + c].index],
-                              challengeActive: true,
-                              pkTeam: 1,
-                            )
-                          else
-                            const SizedBox(width: 62),
-                      ],
-                    ),
-                  ),
-                  Container(width: 1, color: Colors.white24),
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        for (int c = 0; c < 2; c++)
-                          if (bStart + c < teamB.length)
-                            SeatWidget(
-                              seat: teamB[bStart + c],
-                              isHost: false,
-                              isMe: teamB[bStart + c].userId == _currentUser?.uid,
-                              onTap: () => _onSeatTap(teamB[bStart + c]),
-                              emojiTrigger: _seatEmoji[teamB[bStart + c].index],
-                              challengeActive: true,
-                              pkTeam: 2,
-                            )
-                          else
-                            const SizedBox(width: 62),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ],
+      ),
     );
   }
 
@@ -1732,12 +1691,8 @@ class _RoomSettingsSheet extends ConsumerStatefulWidget {
 class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
   @override
   Widget build(BuildContext context) {
-    final challengeEnd = ref.watch(challengeEndTimeProvider(widget.roomId)).valueOrNull;
-    final hasChallenge = challengeEnd != null && challengeEnd.isAfter(DateTime.now());
+    final giftBarActive = ref.watch(giftBarActiveProvider(widget.roomId)).valueOrNull ?? false;
     final currentMax = ref.watch(roomMaxSeatsProvider(widget.roomId)).valueOrNull ?? 9;
-    final pk = ref.watch(pkStateProvider(widget.roomId)).valueOrNull;
-    final pkActive = pk != null && pk.active;
-
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.75,
@@ -1791,26 +1746,17 @@ class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
             onTap: () => _showSeatCountDialog(context, currentMax),
           ),
           _MenuTile(
-            icon: hasChallenge ? Icons.timer_off_rounded : Icons.timer_rounded,
-            label: hasChallenge ? 'إلغاء التحدي 🏁' : 'تفعيل تحدي ⏱',
-            color: hasChallenge ? AppColors.error : const Color(0xFFFF2D78),
-            onTap: hasChallenge
-                ? () async {
-                    Navigator.pop(context);
-                    await RoomStateRepository().deactivateChallenge(widget.roomId);
-                  }
-                : () => _showChallengeDialog(context),
-          ),
-          _MenuTile(
-            icon: Icons.sports_kabaddi_rounded,
-            label: pkActive ? 'إيقاف تحدي PK ⚔️' : 'تحدي PK ⚔️',
-            color: pkActive ? AppColors.error : const Color(0xFFFF6B35),
-            onTap: pkActive
-                ? () async {
-                    Navigator.pop(context);
-                    await RoomStateRepository().stopPK(widget.roomId);
-                  }
-                : () => _showPKDialog(context),
+            icon: giftBarActive ? Icons.card_giftcard_rounded : Icons.card_giftcard_outlined,
+            label: giftBarActive ? 'إيقاف شريط الهدايا 🎁' : 'تفعيل شريط الهدايا فقط 🎁',
+            color: const Color(0xFFFF2D78),
+            onTap: () async {
+              Navigator.pop(context);
+              if (giftBarActive) {
+                await RoomStateRepository().deactivateGiftBar(widget.roomId);
+              } else {
+                await RoomStateRepository().activateGiftBar(widget.roomId);
+              }
+            },
           ),
           _MenuTile(
             icon: Icons.mic_off_rounded, label: 'كتم الكل', color: AppColors.warning,
@@ -1848,7 +1794,7 @@ class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
             spacing: 10,
             runSpacing: 10,
             alignment: WrapAlignment.center,
-            children: [3, 5, 10, 20, 25].map((n) {
+            children: [5, 9, 12, 15, 20, 30].map((n) {
               final isSel = selected == n;
               return GestureDetector(
                 onTap: () => setDlg(() => selected = n),
@@ -1940,250 +1886,16 @@ class _RoomSettingsSheetState extends ConsumerState<_RoomSettingsSheet> {
     );
   }
 
-  void _showChallengeDialog(BuildContext sheetCtx) {
-    showDialog(
-      context: sheetCtx,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('⏱ تفعيل التحدي',
-            style: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('اختر مدة التحدي:',
-                style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 13)),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _DurBtn(label: 'ساعة', hours: 1, roomId: widget.roomId,
-                    dialogCtx: ctx, sheetCtx: sheetCtx),
-                _DurBtn(label: 'ساعتين', hours: 2, roomId: widget.roomId,
-                    dialogCtx: ctx, sheetCtx: sheetCtx),
-                _DurBtn(label: '3 ساعات', hours: 3, roomId: widget.roomId,
-                    dialogCtx: ctx, sheetCtx: sheetCtx),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء', style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo')),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showPKDialog(BuildContext sheetCtx) {
-    showDialog(
-      context: sheetCtx,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('⚔️ تحدي PK',
-            style: TextStyle(color: AppColors.textPrimary, fontFamily: 'Cairo', fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'المقاعد الأولى = 🔥 فريق أ\nالمقاعد الأخيرة = 💙 فريق ب\n\nاختر مدة التحدي:',
-              style: TextStyle(color: AppColors.textSecondary, fontFamily: 'Cairo', fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _PKDurBtn(label: '3 دقائق', minutes: 3, roomId: widget.roomId, dialogCtx: ctx, sheetCtx: sheetCtx),
-                _PKDurBtn(label: '5 دقائق', minutes: 5, roomId: widget.roomId, dialogCtx: ctx, sheetCtx: sheetCtx),
-                _PKDurBtn(label: '10 دقائق', minutes: 10, roomId: widget.roomId, dialogCtx: ctx, sheetCtx: sheetCtx),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إلغاء', style: TextStyle(color: AppColors.textHint, fontFamily: 'Cairo')),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-// ── زر مدة التحدي ──────────────────────────────────────────────────
-class _DurBtn extends StatelessWidget {
-  const _DurBtn({
-    required this.label,
-    required this.hours,
-    required this.roomId,
-    required this.dialogCtx,
-    required this.sheetCtx,
-  });
-  final String label;
-  final int hours;
-  final String roomId;
-  final BuildContext dialogCtx;
-  final BuildContext sheetCtx;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        final end = DateTime.now().add(Duration(hours: hours));
-        Navigator.pop(dialogCtx);
-        Navigator.pop(sheetCtx);
-        await RoomStateRepository().activateChallenge(roomId, end);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFF2D78), Color(0xFFFF6B6B)],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFF2D78).withAlpha(90),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white, fontFamily: 'Cairo',
-            fontWeight: FontWeight.w700, fontSize: 12,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── زر مدة PK ──────────────────────────────────────────────────────
-class _PKDurBtn extends StatelessWidget {
-  const _PKDurBtn({
-    required this.label,
-    required this.minutes,
-    required this.roomId,
-    required this.dialogCtx,
-    required this.sheetCtx,
-  });
-  final String label;
-  final int minutes;
-  final String roomId;
-  final BuildContext dialogCtx;
-  final BuildContext sheetCtx;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        final messenger = ScaffoldMessenger.maybeOf(sheetCtx);
-        Navigator.pop(dialogCtx);
-        Navigator.pop(sheetCtx);
-        try {
-          await RoomStateRepository().startPK(roomId, minutes);
-        } catch (e) {
-          debugPrint('[PK] startPK error: $e');
-          messenger?.showSnackBar(SnackBar(
-            content: Text('خطأ: $e', style: const TextStyle(fontFamily: 'Cairo')),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ));
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFF6B35), Color(0xFFFF4500)],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFF6B35).withAlpha(90),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white, fontFamily: 'Cairo',
-            fontWeight: FontWeight.w700, fontSize: 12,
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  _ChallengeGiftBar — شريط هدايا التحدي المتحرك
+//  _GiftBar — شريط الهدايا
 // ═══════════════════════════════════════════════════════════════════════════
 
-// _ChallengeGiftBar: يراقب Providers فقط — بدون Timer
-class _ChallengeGiftBar extends ConsumerWidget {
-  const _ChallengeGiftBar({required this.roomId});
+class _GiftBar extends ConsumerWidget {
+  const _GiftBar({required this.roomId});
   final String roomId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final endTime = ref.watch(challengeEndTimeProvider(roomId)).valueOrNull;
-    if (endTime == null) return const SizedBox.shrink();
-    final total = ref.watch(challengeGiftTotalProvider(roomId)).valueOrNull ?? 0;
-    final isHost = ref.watch(isHostProvider);
-    return _ChallengeGiftBarContent(
-      roomId: roomId,
-      endTime: endTime,
-      total: total,
-      isHost: isHost,
-    );
-  }
-}
-
-// _ChallengeGiftBarContent: يحسب العداد بـ Timer — بدون ref.watch
-class _ChallengeGiftBarContent extends StatefulWidget {
-  const _ChallengeGiftBarContent({
-    required this.roomId,
-    required this.endTime,
-    required this.total,
-    required this.isHost,
-  });
-  final String roomId;
-  final DateTime endTime;
-  final int total;
-  final bool isHost;
-
-  @override
-  State<_ChallengeGiftBarContent> createState() => _ChallengeGiftBarContentState();
-}
-
-class _ChallengeGiftBarContentState extends State<_ChallengeGiftBarContent> {
-  Timer? _tick;
-  bool _deactivated = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _tick?.cancel();
-    super.dispose();
-  }
 
   static Color _barColor(int total) {
     if (total >= 5000000) return const Color(0xFFFF2D55);
@@ -2208,28 +1920,13 @@ class _ChallengeGiftBarContentState extends State<_ChallengeGiftBarContent> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final remaining = widget.endTime.difference(DateTime.now());
-    if (remaining.isNegative) {
-      if (widget.isHost && !_deactivated) {
-        _deactivated = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          RoomStateRepository().deactivateChallenge(widget.roomId);
-        });
-      }
-      return const SizedBox.shrink();
-    }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final active = ref.watch(giftBarActiveProvider(roomId)).valueOrNull ?? false;
+    if (!active) return const SizedBox.shrink();
 
-    final total = widget.total;
+    final total = ref.watch(challengeGiftTotalProvider(roomId)).valueOrNull ?? 0;
     final progress = _progress(total);
     final color = _barColor(total);
-
-    final h = remaining.inHours;
-    final m = remaining.inMinutes % 60;
-    final s = remaining.inSeconds % 60;
-    final timeLabel = h > 0
-        ? '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}'
-        : '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
 
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 0, 10, 4),
@@ -2244,20 +1941,20 @@ class _ChallengeGiftBarContentState extends State<_ChallengeGiftBarContent> {
       ),
       child: Row(
         children: [
-          // ── يسار: إجمالي الهدايا ────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+          // يسار: أيقونة + عنوان
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('💎', style: TextStyle(fontSize: 11)),
-                const SizedBox(width: 4),
+                Text('🎁', style: TextStyle(fontSize: 13)),
+                SizedBox(width: 5),
                 Text(
-                  _fmt(total),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                  'تفعيل شريط الهدايا فقط',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                     fontFamily: 'Cairo',
                     height: 1,
                   ),
@@ -2266,7 +1963,7 @@ class _ChallengeGiftBarContentState extends State<_ChallengeGiftBarContent> {
             ),
           ),
 
-          // ── وسط: شريط التقدم المتحرك ────────────────────────────
+          // وسط: شريط التقدم
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
@@ -2277,7 +1974,6 @@ class _ChallengeGiftBarContentState extends State<_ChallengeGiftBarContent> {
                     final fillWidth = box.maxWidth * progress;
                     return Stack(
                       children: [
-                        // خلفية شفافة
                         Container(
                           width: double.infinity,
                           decoration: BoxDecoration(
@@ -2285,7 +1981,6 @@ class _ChallengeGiftBarContentState extends State<_ChallengeGiftBarContent> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        // الجزء المملوء
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 800),
                           curve: Curves.easeOut,
@@ -2298,7 +1993,6 @@ class _ChallengeGiftBarContentState extends State<_ChallengeGiftBarContent> {
                             ],
                           ),
                         ),
-                        // شيمر (بريق متحرك)
                         if (progress > 0.02)
                           Positioned.fill(
                             child: Container(
@@ -2323,20 +2017,20 @@ class _ChallengeGiftBarContentState extends State<_ChallengeGiftBarContent> {
             ),
           ),
 
-          // ── يمين: العداد التنازلي ────────────────────────────────
+          // يمين: إجمالي الماسات
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('⏱', style: TextStyle(fontSize: 11)),
-                const SizedBox(width: 3),
+                const Text('💎', style: TextStyle(fontSize: 11)),
+                const SizedBox(width: 4),
                 Text(
-                  timeLabel,
+                  _fmt(total),
                   style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
                     fontFamily: 'Cairo',
                     height: 1,
                   ),

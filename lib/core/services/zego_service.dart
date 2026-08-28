@@ -96,6 +96,10 @@ class ZegoService {
 
       // Route audio to loudspeaker (default is earpiece for voice calls).
       await ZegoExpressEngine.instance.setAudioRouteToSpeaker(true);
+
+      // Clear any leftover speaker-mute from a previous room session.
+      await ZegoExpressEngine.instance.muteAllPlayStreamAudio(false);
+
       // Do NOT startPublishingStream here — that would capture the microphone
       // even when the user is audience-only, which blocks incoming phone calls.
       // Publishing starts only when the user takes a seat (startPublishing).
@@ -109,13 +113,21 @@ class ZegoService {
 
   // Start capturing the microphone and publishing to the room stream.
   // Must be called when the user takes a seat, not at join time.
+  // Safe to call when already publishing (e.g. switching seats) — it will
+  // skip startPublishingStream but always unmute the mic and restore the
+  // speaker route, which can be reset on some Android devices.
   Future<void> startPublishing(String roomId, String userId) async {
-    if (!_initialized || _isPublishing) return;
+    if (!_initialized) return;
     try {
-      await ZegoExpressEngine.instance.startPublishingStream('${roomId}_$userId');
+      if (!_isPublishing) {
+        await ZegoExpressEngine.instance.startPublishingStream('${roomId}_$userId');
+        _isPublishing = true;
+        debugPrint('[ZegoService] 🎙 startPublishing: ${roomId}_$userId');
+      }
+      // Always unmute mic when called — handles seat-switch-while-muted case.
       await ZegoExpressEngine.instance.muteMicrophone(false);
-      _isPublishing = true;
-      debugPrint('[ZegoService] 🎙 startPublishing: ${roomId}_$userId');
+      // Re-assert loudspeaker routing: Android can reset it after publish starts.
+      await ZegoExpressEngine.instance.setAudioRouteToSpeaker(true);
     } catch (e) {
       debugPrint('[ZegoService] ❌ خطأ في startPublishing: $e');
     }

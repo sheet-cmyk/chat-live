@@ -38,9 +38,6 @@ const _kDialCodes = [
   ('🇦🇺', 'أستراليا',   '+61'),
 ];
 
-enum _AuthMode { register, login }
-enum _AuthStep  { form, otp }
-
 class PhoneAuthScreen extends ConsumerStatefulWidget {
   const PhoneAuthScreen({super.key});
 
@@ -50,28 +47,23 @@ class PhoneAuthScreen extends ConsumerStatefulWidget {
 
 class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
   final _phoneCtrl   = TextEditingController();
-  final _passCtrl    = TextEditingController();
-  final _confirmCtrl = TextEditingController();
   final _otpCtrl     = TextEditingController();
+  final _otpFocus    = FocusNode();
 
   (String, String, String) _dial = _kDialCodes[1]; // العراق افتراضياً
-  _AuthMode _mode = _AuthMode.register;
-  _AuthStep _step = _AuthStep.form;
 
   String? _verificationId;
-  bool _passVisible    = false;
-  bool _confirmVisible = false;
-  bool _sendLoading    = false;
-  bool _verLoading     = false;
+  bool _sendLoading = false;
+  bool _verLoading  = false;
 
-  bool get _busy => _sendLoading || _verLoading;
+  bool get _busy      => _sendLoading || _verLoading;
+  bool get _codeSent  => _verificationId != null;
 
   @override
   void dispose() {
     _phoneCtrl.dispose();
-    _passCtrl.dispose();
-    _confirmCtrl.dispose();
     _otpCtrl.dispose();
+    _otpFocus.dispose();
     super.dispose();
   }
 
@@ -81,26 +73,13 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     return '${_dial.$3}$num';
   }
 
-  // ── التحقق من الحقول ──────────────────────────────────────────────────────
-  bool _validateForm() {
-    if (_phoneCtrl.text.trim().length < 6) {
-      _toast('أدخل رقم الهاتف أولاً', isError: true);
-      return false;
-    }
-    if (_passCtrl.text.length < 6) {
-      _toast('كلمة المرور يجب أن تكون 6 أحرف على الأقل', isError: true);
-      return false;
-    }
-    if (_mode == _AuthMode.register && _passCtrl.text != _confirmCtrl.text) {
-      _toast('كلمات المرور غير متطابقة', isError: true);
-      return false;
-    }
-    return true;
-  }
-
-  // ── إرسال OTP (إنشاء حساب فقط) ───────────────────────────────────────────
+  // ── إرسال OTP ────────────────────────────────────────────────────────────
   Future<void> _sendOtp() async {
-    if (!_validateForm()) return;
+    final number = _phoneCtrl.text.trim();
+    if (number.length < 5) {
+      _toast('أدخل رقم الهاتف أولاً', isError: true);
+      return;
+    }
     setState(() => _sendLoading = true);
 
     final repo = ref.read(authRepositoryProvider);
@@ -111,8 +90,9 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
         setState(() {
           _verificationId = verId;
           _sendLoading    = false;
-          _step           = _AuthStep.otp;
+          _otpCtrl.clear();
         });
+        _otpFocus.requestFocus();
         _toast('تم إرسال رمز التحقق');
       },
       onError: (FirebaseAuthException e) {
@@ -122,18 +102,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
         if (msg.isNotEmpty) _toast(msg, isError: true);
       },
       onAutoVerified: (PhoneAuthCredential cred) async {
-        // Android: تحقق تلقائي — نكمل إنشاء الحساب مباشرةً
         if (!mounted) return;
-        setState(() {
-          _sendLoading = false; // أوقف spinner الإرسال
-          _verLoading  = true;
-        });
+        setState(() { _sendLoading = false; _verLoading = true; });
         try {
           await FirebaseAuth.instance.signInWithCredential(cred);
-          await repo.linkPasswordAfterOtp(
-            fullPhone: _fullPhone,
-            password: _passCtrl.text,
-          );
           final user = await repo.fetchCurrentUser();
           if (!mounted) return;
           (user != null && user.displayName.isNotEmpty)
@@ -149,10 +121,14 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     );
   }
 
-  // ── التحقق من رمز OTP المُدخل ─────────────────────────────────────────────
+  // ── التحقق من رمز OTP ─────────────────────────────────────────────────
   Future<void> _verifyOtp() async {
     if (_otpCtrl.text.trim().length != 6) {
       _toast('الرمز يجب أن يكون 6 أرقام', isError: true);
+      return;
+    }
+    if (_verificationId == null) {
+      _toast('أرسل رمز التحقق أولاً', isError: true);
       return;
     }
     if (_verLoading) return;
@@ -160,18 +136,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
 
     final repo = ref.read(authRepositoryProvider);
     try {
-      // 1. التحقق من OTP → يُنشئ أو يُسجّل دخول مستخدم الهاتف
-      await repo.verifyOtpAndLogin(
+      final user = await repo.verifyOtpAndLogin(
         verificationId: _verificationId!,
         smsCode: _otpCtrl.text.trim(),
       );
-      // 2. ربط البريد الوهمي وكلمة المرور بالحساب
-      await repo.linkPasswordAfterOtp(
-        fullPhone: _fullPhone,
-        password: _passCtrl.text,
-      );
-      // 3. جلب بيانات المستخدم
-      final user = await repo.fetchCurrentUser();
       if (!mounted) return;
       (user != null && user.displayName.isNotEmpty)
           ? context.go(AppRoutes.home)
@@ -183,35 +151,13 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     }
   }
 
-  // ── تسجيل الدخول بكلمة المرور (بدون OTP) ────────────────────────────────
-  Future<void> _login() async {
-    if (!_validateForm()) return;
-    setState(() => _verLoading = true);
-
-    try {
-      final repo = ref.read(authRepositoryProvider);
-      final user = await repo.signInWithPhonePassword(
-        fullPhone: _fullPhone,
-        password: _passCtrl.text,
-      );
-      if (!mounted) return;
-      (user != null && user.displayName.isNotEmpty)
-          ? context.go(AppRoutes.home)
-          : context.go(AppRoutes.setupProfile);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _verLoading = false);
-      _toast(_authErrorMsg(e), isError: true);
-    }
-  }
-
-  // ── رسائل خطأ إرسال OTP ──────────────────────────────────────────────────
+  // ── رسائل خطأ إرسال OTP ──────────────────────────────────────────────
   String _otpSendErrorMsg(FirebaseAuthException e) {
     final raw = e.message ?? '';
-    if (e.code == 'invalid-phone-number')    return 'رقم الهاتف غير صحيح';
-    if (e.code == 'too-many-requests')        return 'طلبات كثيرة، انتظر قليلاً';
-    if (e.code == 'operation-not-allowed')    return 'تسجيل الهاتف غير مُفعَّل في Firebase';
-    if (e.code == 'network-request-failed')   return 'تحقق من اتصالك بالإنترنت';
+    if (e.code == 'invalid-phone-number')  return 'رقم الهاتف غير صحيح';
+    if (e.code == 'too-many-requests')      return 'طلبات كثيرة، انتظر قليلاً';
+    if (e.code == 'operation-not-allowed')  return 'تسجيل الهاتف غير مُفعَّل في Firebase';
+    if (e.code == 'network-request-failed') return 'تحقق من اتصالك بالإنترنت';
     if (raw.contains('region') || raw.contains('SMS unable')) {
       _showRegionDialog();
       return '';
@@ -219,21 +165,17 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     return 'خطأ: ${e.code}';
   }
 
-  // ── رسائل خطأ عامة بالعربية ──────────────────────────────────────────────
+  // ── رسائل خطأ التحقق ─────────────────────────────────────────────────
   String _authErrorMsg(Object e) {
     final s = e.toString();
-    if (s.contains('user-not-found'))               return 'رقم الهاتف غير مسجل، أنشئ حساباً أولاً';
-    if (s.contains('wrong-password'))               return 'كلمة المرور غير صحيحة';
-    if (s.contains('invalid-credential'))           return 'كلمة المرور غير صحيحة';
-    if (s.contains('invalid-verification-code'))    return 'رمز التحقق غير صحيح، حاول مجدداً';
-    if (s.contains('session-expired'))              return 'انتهت صلاحية الرمز، اضغط رجوع وأعد الإرسال';
-    if (s.contains('email-already-in-use'))         return 'رقم الهاتف مسجل بالفعل، استخدم تسجيل الدخول';
-    if (s.contains('too-many-requests'))            return 'محاولات كثيرة، انتظر قليلاً';
-    if (s.contains('network-request-failed'))       return 'تحقق من اتصالك بالإنترنت';
+    if (s.contains('invalid-verification-code')) return 'رمز التحقق غير صحيح';
+    if (s.contains('session-expired'))            return 'انتهت صلاحية الرمز، أعد إرسال الرمز';
+    if (s.contains('too-many-requests'))          return 'محاولات كثيرة، انتظر قليلاً';
+    if (s.contains('network-request-failed'))     return 'تحقق من اتصالك بالإنترنت';
     return 'حدث خطأ، حاول مجدداً';
   }
 
-  // ── حوار إعداد Firebase SMS ──────────────────────────────────────────────
+  // ── حوار إعداد SMS regions ─────────────────────────────────────────────
   void _showRegionDialog() {
     showDialog(
       context: context,
@@ -251,11 +193,9 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(
-              'يجب تفعيل SMS للمناطق في Firebase Console:',
-              textAlign: TextAlign.right,
-              style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w600, fontSize: 14),
-            ),
+            Text('يجب تفعيل SMS للمناطق في Firebase Console:',
+                textAlign: TextAlign.right,
+                style: TextStyle(fontFamily: 'Cairo', fontWeight: FontWeight.w600, fontSize: 14)),
             SizedBox(height: 12),
             _Step(n: '1', text: 'افتح Firebase Console'),
             _Step(n: '2', text: 'Authentication → Settings'),
@@ -297,225 +237,78 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     if (result != null && mounted) setState(() => _dial = result);
   }
 
-  void _backFromOtp() {
-    setState(() {
-      _step = _AuthStep.form;
-      _otpCtrl.clear();
-    });
-  }
-
-  // ── بناء الواجهة ──────────────────────────────────────────────────────────
+  // ── بناء الواجهة ──────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
 
-    return PopScope(
-      canPop: _step == _AuthStep.form,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _step == _AuthStep.otp) _backFromOtp();
-      },
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        resizeToAvoidBottomInset: true,
-        body: Stack(
-          children: [
-            // ── خلفية بنفسجية متدرجة ─────────────────────────────────────
-            Positioned(
-              top: 0, left: 0, right: 0,
-              height: size.height * 0.30,
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xFFCFB8F0), Color(0xFFEDE4FA), Colors.white],
-                    stops: [0.0, 0.65, 1.0],
-                  ),
+    return Scaffold(
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: true,
+      body: Stack(
+        children: [
+          // تدرج علوي
+          Positioned(
+            top: 0, left: 0, right: 0,
+            height: size.height * 0.30,
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFCFB8F0), Color(0xFFEDE4FA), Colors.white],
+                  stops: [0.0, 0.65, 1.0],
                 ),
               ),
             ),
+          ),
 
-            SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ── شريط العنوان ─────────────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        GestureDetector(
-                          onTap: _step == _AuthStep.otp
-                              ? _backFromOtp
-                              : () => Navigator.pop(context),
-                          child: const Icon(Icons.arrow_back_ios_rounded,
-                              size: 22, color: Color(0xFF5C35A0)),
-                        ),
-                        const Text(
-                          'LivChat',
-                          style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w700,
-                            fontFamily: 'Cairo', color: Color(0xFF2D2D2D),
-                          ),
-                        ),
-                        const SizedBox(width: 26),
-                      ],
-                    ),
-                  ),
-
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        transitionBuilder: (child, anim) => FadeTransition(
-                          opacity: anim,
-                          child: SlideTransition(
-                            position: Tween<Offset>(
-                              begin: const Offset(0.04, 0),
-                              end: Offset.zero,
-                            ).animate(anim),
-                            child: child,
-                          ),
-                        ),
-                        child: _step == _AuthStep.otp
-                            ? _buildOtpStep()
-                            : _buildFormStep(),
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // شريط العنوان
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: const Icon(Icons.arrow_back_ios_rounded,
+                            size: 22, color: Color(0xFF5C35A0)),
                       ),
-                    ),
+                      const Text('LivChat',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
+                              fontFamily: 'Cairo', color: Color(0xFF2D2D2D))),
+                      const SizedBox(width: 26),
+                    ],
                   ),
-                ],
-              ),
+                ),
+
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: _buildContent(),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // ── خطوة النموذج (إنشاء حساب / دخول) ────────────────────────────────────
-  Widget _buildFormStep() {
+  Widget _buildContent() {
     return Column(
-      key: const ValueKey('form'),
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        const SizedBox(height: 20),
-
-        // ── مبدّل النمط ──────────────────────────────────────────────────
-        Container(
-          height: 46,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF3F0FA),
-            borderRadius: BorderRadius.circular(30),
-          ),
-          child: Row(
-            children: [
-              _ModeTab(
-                label: 'إنشاء حساب',
-                active: _mode == _AuthMode.register,
-                onTap: () {
-                  if (_mode == _AuthMode.register) return;
-                  setState(() { _mode = _AuthMode.register; });
-                },
-              ),
-              _ModeTab(
-                label: 'تسجيل الدخول',
-                active: _mode == _AuthMode.login,
-                onTap: () {
-                  if (_mode == _AuthMode.login) return;
-                  setState(() {
-                    _mode = _AuthMode.login;
-                    _confirmCtrl.clear();
-                  });
-                },
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 28),
-
-        // ── رقم الهاتف ───────────────────────────────────────────────────
-        const Text('رقم الهاتف',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
-                fontFamily: 'Cairo', color: Color(0xFF5C35A0))),
-        const SizedBox(height: 8),
-        _buildPhoneField(),
-
-        const SizedBox(height: 18),
-
-        // ── كلمة المرور ──────────────────────────────────────────────────
-        const Text('كلمة المرور',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
-                fontFamily: 'Cairo', color: Color(0xFF5C35A0))),
-        const SizedBox(height: 8),
-        _buildPasswordField(
-          ctrl: _passCtrl,
-          hint: 'أدخل كلمة المرور (6 أحرف على الأقل)',
-          visible: _passVisible,
-          onToggle: () => setState(() => _passVisible = !_passVisible),
-        ),
-
-        // ── تأكيد كلمة المرور (إنشاء حساب فقط) ──────────────────────────
-        if (_mode == _AuthMode.register) ...[
-          const SizedBox(height: 18),
-          const Text('تأكيد كلمة المرور',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
-                  fontFamily: 'Cairo', color: Color(0xFF5C35A0))),
-          const SizedBox(height: 8),
-          _buildPasswordField(
-            ctrl: _confirmCtrl,
-            hint: 'أعد كتابة كلمة المرور',
-            visible: _confirmVisible,
-            onToggle: () => setState(() => _confirmVisible = !_confirmVisible),
-          ),
-        ],
-
-        const SizedBox(height: 32),
-
-        // ── زر الإجراء ───────────────────────────────────────────────────
-        _buildActionButton(
-          label: _mode == _AuthMode.register ? 'إنشاء حساب' : 'دخول',
-          loading: _busy,
-          onTap: _mode == _AuthMode.register ? _sendOtp : _login,
-        ),
-
-        const SizedBox(height: 16),
-
-        if (_mode == _AuthMode.register)
-          Center(
-            child: RichText(
-              text: const TextSpan(
-                style: TextStyle(fontFamily: 'Cairo', fontSize: 13,
-                    color: Color(0xFF9AA0A6)),
-                children: [
-                  TextSpan(text: 'سيتم إرسال رمز تحقق عبر '),
-                  TextSpan(
-                    text: 'SMS',
-                    style: TextStyle(
-                        color: Color(0xFF7B1FA2), fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        const SizedBox(height: 32),
-      ],
-    );
-  }
-
-  // ── خطوة رمز التحقق OTP ──────────────────────────────────────────────────
-  Widget _buildOtpStep() {
-    return Column(
-      key: const ValueKey('otp'),
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const SizedBox(height: 32),
+        const SizedBox(height: 36),
 
+        // أيقونة
         Container(
-          width: 72, height: 72,
+          width: 80, height: 80,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: const LinearGradient(
@@ -523,92 +316,63 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF9C4DCC).withAlpha(60),
-                blurRadius: 16, offset: const Offset(0, 6),
-              ),
-            ],
+            boxShadow: [BoxShadow(color: const Color(0xFF9C4DCC).withAlpha(60), blurRadius: 16, offset: const Offset(0, 6))],
           ),
-          child: const Icon(Icons.sms_rounded, color: Colors.white, size: 34),
+          child: const Icon(Icons.phone_iphone_rounded, color: Colors.white, size: 38),
         ),
+        const SizedBox(height: 20),
+
+        const Text('أدخل رقم هاتفك',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
+                fontFamily: 'Cairo', color: Color(0xFF2D2D2D))),
+        const SizedBox(height: 6),
+        const Text('سنرسل لك رمز التحقق عبر SMS',
+            style: TextStyle(fontSize: 13, fontFamily: 'Cairo', color: Color(0xFF9AA0A6))),
+
+        const SizedBox(height: 36),
+
+        // ── حقل رقم الهاتف ──
+        const Align(
+          alignment: Alignment.centerRight,
+          child: Text('رقم الهاتف',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                  fontFamily: 'Cairo', color: Color(0xFF5C35A0))),
+        ),
+        const SizedBox(height: 8),
+        _buildPhoneField(),
 
         const SizedBox(height: 20),
 
-        const Text(
-          'رمز التحقق',
-          style: TextStyle(
-            fontSize: 22, fontWeight: FontWeight.w800,
-            fontFamily: 'Cairo', color: Color(0xFF2D2D2D),
-          ),
+        // ── حقل رمز التحقق مع زر الإرسال ──
+        const Align(
+          alignment: Alignment.centerRight,
+          child: Text('رمز التحقق',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                  fontFamily: 'Cairo', color: Color(0xFF5C35A0))),
         ),
-        const SizedBox(height: 6),
-        Text(
-          'أُرسل إلى $_fullPhone',
-          textDirection: TextDirection.ltr,
-          style: const TextStyle(
-            fontSize: 14, fontFamily: 'Cairo', color: Color(0xFF9AA0A6),
-          ),
-        ),
+        const SizedBox(height: 8),
+        _buildOtpRow(),
 
         const SizedBox(height: 32),
 
-        // ── حقل OTP ────────────────────────────────────────────────────
-        Container(
-          height: 62,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF3F0FA),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF9C4DCC).withAlpha(60), width: 1.2),
-          ),
-          child: TextField(
-            controller: _otpCtrl,
-            keyboardType: TextInputType.number,
-            textDirection: TextDirection.ltr,
-            textAlign: TextAlign.center,
-            maxLength: 6,
-            autofocus: true,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            onChanged: (v) {
-              setState(() {});
-              if (v.length == 6) _verifyOtp();
-            },
-            style: const TextStyle(
-              fontSize: 24, letterSpacing: 10,
-              fontWeight: FontWeight.w800, color: Color(0xFF2D2D2D),
-            ),
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              isDense: true,
-              counterText: '',
-              hintText: '— — — — — —',
-              hintStyle: TextStyle(
-                color: Color(0xFFBDBDBD), fontSize: 18,
-                letterSpacing: 8, fontWeight: FontWeight.normal,
-              ),
-              contentPadding: EdgeInsets.symmetric(vertical: 18),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 28),
-
+        // زر تأكيد
         _buildActionButton(
-          label: 'تأكيد',
+          label: 'تحقق ودخول',
           loading: _verLoading,
           onTap: _verifyOtp,
         ),
 
         const SizedBox(height: 16),
 
-        TextButton(
-          onPressed: _busy ? null : _backFromOtp,
-          child: const Text(
-            'لم يصلك الرمز؟ اضغط هنا للرجوع',
-            style: TextStyle(
-              fontSize: 13, fontFamily: 'Cairo',
-              color: Color(0xFF7B1FA2), fontWeight: FontWeight.w600,
-            ),
+        RichText(
+          textAlign: TextAlign.center,
+          text: const TextSpan(
+            style: TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Color(0xFF9AA0A6)),
+            children: [
+              TextSpan(text: 'بالمتابعة توافق على '),
+              TextSpan(text: 'شروط الاستخدام',
+                  style: TextStyle(color: Color(0xFF7B1FA2), fontWeight: FontWeight.w700)),
+            ],
           ),
         ),
 
@@ -617,10 +381,119 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     );
   }
 
-  // ── حقل رقم الهاتف ───────────────────────────────────────────────────────
+  // ── مستطيل رمز التحقق مع زر إرسال على اليسار ────────────────────────
+  Widget _buildOtpRow() {
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F0FA),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(
+          color: _codeSent
+              ? const Color(0xFF9C4DCC).withAlpha(100)
+              : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          // زر إرسال الرمز — يسار المستطيل
+          GestureDetector(
+            onTap: _busy ? null : _sendOtp,
+            child: Container(
+              margin: const EdgeInsets.all(6),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFAB7AE0), Color(0xFF7B1FA2)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Center(
+                child: _sendLoading
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : Text(
+                        _codeSent ? 'إعادة' : 'إرسال الرمز',
+                        style: const TextStyle(
+                          color: Colors.white, fontFamily: 'Cairo',
+                          fontWeight: FontWeight.w700, fontSize: 13,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+
+          // فاصل عمودي
+          Container(
+            height: 24, width: 1,
+            color: const Color(0xFFD0D0D0),
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+          ),
+
+          // حقل إدخال الرمز
+          Expanded(
+            child: TextField(
+              controller: _otpCtrl,
+              focusNode: _otpFocus,
+              enabled: _codeSent,
+              keyboardType: TextInputType.number,
+              textDirection: TextDirection.ltr,
+              textAlign: TextAlign.center,
+              maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              onChanged: (v) {
+                setState(() {});
+                if (v.length == 6) _verifyOtp();
+              },
+              style: const TextStyle(
+                fontSize: 22, letterSpacing: 10,
+                fontWeight: FontWeight.w800, color: Color(0xFF2D2D2D),
+              ),
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+                counterText: '',
+                hintText: _codeSent ? '● ● ● ● ● ●' : '— — — — — —',
+                hintStyle: TextStyle(
+                  color: _codeSent
+                      ? const Color(0xFF9C4DCC).withAlpha(90)
+                      : const Color(0xFFD0D0D0),
+                  fontSize: _codeSent ? 9 : 14,
+                  letterSpacing: _codeSent ? 6 : 3,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+          ),
+
+          // زر مسح إذا في نص
+          if (_otpCtrl.text.isNotEmpty)
+            GestureDetector(
+              onTap: () => setState(() => _otpCtrl.clear()),
+              child: Container(
+                margin: const EdgeInsets.only(right: 10),
+                width: 26, height: 26,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.grey.withAlpha(60)),
+                child: const Icon(Icons.close_rounded, size: 14, color: Colors.grey),
+              ),
+            )
+          else
+            const SizedBox(width: 14),
+        ],
+      ),
+    );
+  }
+
+  // ── حقل رقم الهاتف ───────────────────────────────────────────────────
   Widget _buildPhoneField() {
     return Container(
-      height: 52,
+      height: 56,
       decoration: BoxDecoration(
         color: const Color(0xFFF3F0FA),
         borderRadius: BorderRadius.circular(30),
@@ -633,9 +506,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
               child: Container(
                 margin: const EdgeInsets.only(left: 10),
                 width: 28, height: 28,
-                decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.grey.withAlpha(60)),
+                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.grey.withAlpha(60)),
                 child: const Icon(Icons.close_rounded, size: 16, color: Colors.grey),
               ),
             )
@@ -650,8 +521,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
               textAlign: TextAlign.right,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               onChanged: (_) => setState(() {}),
-              style: const TextStyle(
-                  fontSize: 16, letterSpacing: 1, color: Color(0xFF2D2D2D)),
+              style: const TextStyle(fontSize: 16, letterSpacing: 1, color: Color(0xFF2D2D2D)),
               decoration: const InputDecoration(
                 border: InputBorder.none,
                 isDense: true,
@@ -662,11 +532,8 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
             ),
           ),
 
-          Container(
-            height: 22, width: 1,
-            color: const Color(0xFFD0D0D0),
-            margin: const EdgeInsets.symmetric(horizontal: 8),
-          ),
+          Container(height: 22, width: 1, color: const Color(0xFFD0D0D0),
+              margin: const EdgeInsets.symmetric(horizontal: 8)),
 
           GestureDetector(
             onTap: _pickDial,
@@ -675,9 +542,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
               child: Row(
                 children: [
                   Text(_dial.$3,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w700,
-                          color: Color(0xFF5C35A0))),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF5C35A0))),
                   const SizedBox(width: 4),
                   Text(_dial.$1, style: const TextStyle(fontSize: 18)),
                 ],
@@ -689,54 +554,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     );
   }
 
-  // ── حقل كلمة المرور ──────────────────────────────────────────────────────
-  Widget _buildPasswordField({
-    required TextEditingController ctrl,
-    required String hint,
-    required bool visible,
-    required VoidCallback onToggle,
-  }) {
-    return Container(
-      height: 52,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3F0FA),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: onToggle,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 14),
-              child: Icon(
-                visible ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-                size: 20, color: const Color(0xFF9C4DCC),
-              ),
-            ),
-          ),
-          Expanded(
-            child: TextField(
-              controller: ctrl,
-              obscureText: !visible,
-              textDirection: TextDirection.rtl,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 15, color: Color(0xFF2D2D2D)),
-              decoration: InputDecoration(
-                border: InputBorder.none,
-                isDense: true,
-                hintText: hint,
-                hintStyle: const TextStyle(
-                    color: Color(0xFFBDBDBD), fontFamily: 'Cairo', fontSize: 13),
-                contentPadding: const EdgeInsets.only(right: 14),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── زر الإجراء الرئيسي ───────────────────────────────────────────────────
+  // ── زر الإجراء الرئيسي ───────────────────────────────────────────────
   Widget _buildActionButton({
     required String label,
     required bool loading,
@@ -758,67 +576,15 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                 end: Alignment.centerRight,
               ),
               borderRadius: BorderRadius.circular(30),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF9C4DCC).withAlpha(70),
-                  blurRadius: 14, offset: const Offset(0, 5),
-                ),
-              ],
+              boxShadow: [BoxShadow(color: const Color(0xFF9C4DCC).withAlpha(70), blurRadius: 14, offset: const Offset(0, 5))],
             ),
             child: Center(
               child: loading
-                  ? const SizedBox(
-                      width: 24, height: 24,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2.5))
-                  : Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w700,
-                        color: Colors.white, fontFamily: 'Cairo',
-                      ),
-                    ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── تبويب وضع الشاشة (إنشاء / دخول) ─────────────────────────────────────────
-class _ModeTab extends StatelessWidget {
-  const _ModeTab({required this.label, required this.active, required this.onTap});
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            gradient: active
-                ? const LinearGradient(
-                    colors: [Color(0xFFAB7AE0), Color(0xFF7B1FA2)],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  )
-                : null,
-            borderRadius: BorderRadius.circular(26),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14, fontWeight: FontWeight.w700,
-                fontFamily: 'Cairo',
-                color: active ? Colors.white : const Color(0xFF9C4DCC),
-              ),
+                  ? const SizedBox(width: 24, height: 24,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                  : Text(label,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
+                          color: Colors.white, fontFamily: 'Cairo')),
             ),
           ),
         ),
@@ -841,18 +607,14 @@ class _Step extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           Flexible(
-            child: Text(text,
-                textAlign: TextAlign.right,
-                style: const TextStyle(
-                    fontFamily: 'Cairo', fontSize: 13, color: Color(0xFF424242))),
+            child: Text(text, textAlign: TextAlign.right,
+                style: const TextStyle(fontFamily: 'Cairo', fontSize: 13, color: Color(0xFF424242))),
           ),
           const SizedBox(width: 8),
           CircleAvatar(
             radius: 10,
             backgroundColor: const Color(0xFF7B1FA2),
-            child: Text(n,
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+            child: Text(n, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -878,9 +640,7 @@ class _DialSheetState extends State<_DialSheet> {
     setState(() {
       _list = q.isEmpty
           ? _kDialCodes
-          : _kDialCodes
-              .where((c) => c.$2.contains(q) || c.$3.contains(q))
-              .toList();
+          : _kDialCodes.where((c) => c.$2.contains(q) || c.$3.contains(q)).toList();
     });
   }
 
@@ -903,16 +663,12 @@ class _DialSheetState extends State<_DialSheet> {
           Container(
             margin: const EdgeInsets.only(top: 12, bottom: 4),
             width: 40, height: 4,
-            decoration: BoxDecoration(
-                color: const Color(0xFFDEDEDE),
-                borderRadius: BorderRadius.circular(2)),
+            decoration: BoxDecoration(color: const Color(0xFFDEDEDE), borderRadius: BorderRadius.circular(2)),
           ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 10),
             child: Text('اختر رمز الدولة',
-                style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w700,
-                    fontFamily: 'Cairo')),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, fontFamily: 'Cairo')),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -923,15 +679,11 @@ class _DialSheetState extends State<_DialSheet> {
               style: const TextStyle(fontFamily: 'Cairo', fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'ابحث عن دولة...',
-                hintStyle: const TextStyle(
-                    fontFamily: 'Cairo', color: Color(0xFFBDBDBD)),
-                prefixIcon: const Icon(Icons.search_rounded,
-                    color: Color(0xFF9AA0A6)),
+                hintStyle: const TextStyle(fontFamily: 'Cairo', color: Color(0xFFBDBDBD)),
+                prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF9AA0A6)),
                 filled: true,
                 fillColor: const Color(0xFFF5F5F5),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 contentPadding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
@@ -946,38 +698,24 @@ class _DialSheetState extends State<_DialSheet> {
                 return InkWell(
                   onTap: () => widget.onSelect(e),
                   child: Container(
-                    color: sel
-                        ? const Color(0xFF9C4DCC).withAlpha(14)
-                        : null,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 13),
+                    color: sel ? const Color(0xFF9C4DCC).withAlpha(14) : null,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
                     child: Row(
                       children: [
                         Text(e.$1, style: const TextStyle(fontSize: 22)),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Text(e.$2,
-                              textAlign: TextAlign.right,
-                              style: TextStyle(
-                                  fontSize: 15,
-                                  fontFamily: 'Cairo',
-                                  fontWeight: sel
-                                      ? FontWeight.w700
-                                      : FontWeight.normal,
-                                  color: sel
-                                      ? const Color(0xFF9C4DCC)
-                                      : const Color(0xFF2D2D2D))),
+                          child: Text(e.$2, textAlign: TextAlign.right,
+                              style: TextStyle(fontSize: 15, fontFamily: 'Cairo',
+                                  fontWeight: sel ? FontWeight.w700 : FontWeight.normal,
+                                  color: sel ? const Color(0xFF9C4DCC) : const Color(0xFF2D2D2D))),
                         ),
                         const SizedBox(width: 8),
                         Text(e.$3,
-                            style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF9C4DCC))),
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF9C4DCC))),
                         if (sel) ...[
                           const SizedBox(width: 6),
-                          const Icon(Icons.check_rounded,
-                              color: Color(0xFF9C4DCC), size: 18),
+                          const Icon(Icons.check_rounded, color: Color(0xFF9C4DCC), size: 18),
                         ],
                       ],
                     ),
