@@ -110,14 +110,6 @@ class AuthRemoteDataSource {
     await _firestore.collection('users').doc(uid).set(data, SetOptions(merge: true));
   }
 
-  // Firestore: حفظ رقم الهاتف فقط
-  Future<void> savePhoneNumber(String uid, String phoneNumber) async {
-    await _firestore.collection('users').doc(uid).set(
-      {'phoneNumber': phoneNumber},
-      SetOptions(merge: true),
-    );
-  }
-
   // تحديث حالة الاتصال
   Future<void> setOnlineStatus(String uid, bool isOnline) async {
     await _firestore.collection('users').doc(uid).set({

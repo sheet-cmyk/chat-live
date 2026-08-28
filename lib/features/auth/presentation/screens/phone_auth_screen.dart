@@ -76,8 +76,8 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
   // ── إرسال OTP ────────────────────────────────────────────────────────────
   Future<void> _sendOtp() async {
     final number = _phoneCtrl.text.trim();
-    if (number.length < 5) {
-      _toast('أدخل رقم الهاتف أولاً', isError: true);
+    if (number.length < 7) {
+      _toast('أدخل رقم هاتف صحيح', isError: true);
       return;
     }
     setState(() => _sendLoading = true);

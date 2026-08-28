@@ -85,6 +85,12 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
     super.dispose();
   }
 
+  // ── رجوع: يُسجّل الخروج ثم يعود لشاشة الدخول ──────────────────────────────
+  Future<void> _goBack() async {
+    await FirebaseAuth.instance.signOut();
+    if (mounted) context.go(AppRoutes.login);
+  }
+
   // ── اختيار الصورة ──────────────────────────────────────────────────────────
   Future<void> _pickImage() async {
     final src = await showModalBottomSheet<ImageSource>(
@@ -292,12 +298,36 @@ class _SetupProfileScreenState extends ConsumerState<SetupProfileScreen> {
           children: [
             // ── رأس Google-style ─────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Column(children: [
-                // نقاط ألوان Google
-                const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  _GDot(_kBlue), _GDot(_kRed), _GDot(_kYellow), _GDot(_kGreen),
-                ]),
+                // شريط علوي: زر رجوع + نقاط Google + فراغ موازن
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: _goBack,
+                      child: Container(
+                        width: 38, height: 38,
+                        decoration: BoxDecoration(
+                          color: _kBg,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: const Color(0xFFDADCE0)),
+                        ),
+                        child: const Icon(Icons.arrow_back_ios_rounded,
+                            size: 16, color: _kBlue),
+                      ),
+                    ),
+                    const Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _GDot(_kBlue), _GDot(_kRed),
+                          _GDot(_kYellow), _GDot(_kGreen),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 38), // موازن للزر
+                  ],
+                ),
                 const SizedBox(height: 14),
                 const Text('إعداد ملفك الشخصي',
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,

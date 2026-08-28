@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -48,41 +49,18 @@ class AppRoutes {
   static const String setupProfile  = '/setup-profile';
 }
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
-
-GoRouter createAppRouter(WidgetRef ref) {
-  return GoRouter(
-    navigatorKey: _rootNavigatorKey,
-    initialLocation: AppRoutes.splash,
-    redirect: (context, state) {
-      final authState = ref.read(authStateProvider);
-      final isLoggedIn = authState.valueOrNull != null;
-      final isOnAuthPage = state.matchedLocation == AppRoutes.login ||
-          state.matchedLocation == AppRoutes.splash;
-
-      if (!isLoggedIn && !isOnAuthPage) return AppRoutes.login;
-      return null;
-    },
-    routes: [
-      GoRoute(
-        path: AppRoutes.splash,
-        builder: (context, state) => const SplashScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.login,
-        builder: (context, state) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.home,
-        builder: (context, state) => const MainScreen(),
-      ),
-    ],
-  );
-}
-
-// Router الرئيسي
+// Router الرئيسي — مع guard للمصادقة
 final GoRouter appRouter = GoRouter(
   initialLocation: AppRoutes.splash,
+  redirect: (context, state) {
+    final isLoggedIn = FirebaseAuth.instance.currentUser != null;
+    final loc = state.matchedLocation;
+    final isPublic = loc == AppRoutes.splash ||
+        loc == AppRoutes.login ||
+        loc == AppRoutes.setupProfile;
+    if (!isLoggedIn && !isPublic) return AppRoutes.login;
+    return null;
+  },
   routes: [
     GoRoute(
       path: AppRoutes.splash,

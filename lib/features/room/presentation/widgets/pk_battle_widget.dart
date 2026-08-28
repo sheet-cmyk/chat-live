@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/pk_model.dart';
 import '../../data/repositories/room_state_repository.dart';
 import '../providers/room_provider.dart';
+import '../../../../core/services/zego_service.dart';
 
 class PkBattleWidget extends ConsumerStatefulWidget {
   const PkBattleWidget({
@@ -79,15 +80,19 @@ class _PkBattleWidgetState extends ConsumerState<PkBattleWidget>
     final name = widget.currentUserName ?? 'مستخدم';
     final avatar = widget.currentUserAvatar;
     final repo = RoomStateRepository();
+    bool joined = false;
     if (side == 'host') {
-      await repo.joinPkHost(
+      joined = await repo.joinPkHost(
           widget.roomId, userId: uid, userName: name, userAvatar: avatar);
     } else if (side == 'red') {
-      await repo.joinPkRed(
+      joined = await repo.joinPkRed(
           widget.roomId, userId: uid, userName: name, userAvatar: avatar);
     } else {
-      await repo.joinPkBlue(
+      joined = await repo.joinPkBlue(
           widget.roomId, userId: uid, userName: name, userAvatar: avatar);
+    }
+    if (joined) {
+      await ZegoService().startPublishing(widget.roomId, uid);
     }
   }
 
@@ -95,6 +100,7 @@ class _PkBattleWidgetState extends ConsumerState<PkBattleWidget>
     final uid = widget.currentUserId;
     if (uid == null) return;
     await RoomStateRepository().leavePkSeat(widget.roomId, uid);
+    await ZegoService().stopPublishing();
   }
 
   Future<void> _startBattle(int durationSecs) async {
@@ -148,12 +154,6 @@ class _PkBattleWidgetState extends ConsumerState<PkBattleWidget>
 
           const SizedBox(height: 6),
 
-          // Score bar
-          if (pk.isActive || pk.isFinished) ...[
-            _buildScoreBar(pk),
-            const SizedBox(height: 8),
-          ],
-
           // Player row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -186,6 +186,12 @@ class _PkBattleWidgetState extends ConsumerState<PkBattleWidget>
               ),
             ],
           ),
+
+          // Score bar — below all chairs, spanning full width
+          if (pk.isActive || pk.isFinished) ...[
+            const SizedBox(height: 8),
+            _buildScoreBar(pk),
+          ],
 
           // Winner banner
           if (pk.isFinished) _buildWinnerBanner(pk),
@@ -517,42 +523,34 @@ class _PkBattleWidgetState extends ConsumerState<PkBattleWidget>
       );
     }
 
-    // Waiting
-    final canStart = widget.isHost &&
-        pk.redPlayerId != null &&
-        pk.bluePlayerId != null;
+    // Waiting — any user can start once both player seats are filled
+    final canStart = pk.redPlayerId != null && pk.bluePlayerId != null;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const Text(
-          '⚔️\nPK',
+          '⚔️',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.white70,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            height: 1.3,
-            shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
-          ),
+          style: TextStyle(fontSize: 22),
         ),
         if (canStart) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           GestureDetector(
             onTap: () => _startBattle(pk.durationSecs),
             child: Container(
               padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFFFF6B35), Color(0xFFCC1111)],
+                  colors: [Color(0xFF22C55E), Color(0xFF16A34A)],
                 ),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(18),
                 boxShadow: const [
                   BoxShadow(
-                    color: Color(0x88FF4444),
-                    blurRadius: 10,
+                    color: Color(0x9922C55E),
+                    blurRadius: 12,
                     spreadRadius: 2,
                   ),
                 ],
@@ -561,11 +559,21 @@ class _PkBattleWidgetState extends ConsumerState<PkBattleWidget>
                 'ابدأ',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w900,
                   fontFamily: 'Cairo',
                 ),
               ),
+            ),
+          ),
+        ] else ...[
+          const Text(
+            'PK',
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'Cairo',
             ),
           ),
         ],

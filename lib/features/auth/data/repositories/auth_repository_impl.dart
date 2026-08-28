@@ -23,20 +23,6 @@ class AuthRepository {
     );
   }
 
-  // يُستخدم من شاشة OTP القديمة
-  Future<UserModel?> verifyOtpAndGetUser({
-    required String verificationId,
-    required String smsCode,
-  }) async {
-    final credential = await _dataSource.verifyOtp(
-      verificationId: verificationId,
-      smsCode: smsCode,
-    );
-    final uid = credential.user!.uid;
-    return _dataSource.fetchUser(uid);
-  }
-
-  // يُستخدم من OtpLoginScreen (تسجيل الهاتف الجديد)
   Future<UserModel?> verifyOtpAndLogin({
     required String verificationId,
     required String smsCode,
