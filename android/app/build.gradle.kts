@@ -41,8 +41,8 @@ android {
         applicationId = "com.partyhub.party_hub"
         minSdk = 24
         targetSdk = 36
-        versionCode = 127
-        versionName = "1.2.7"
+        versionCode = 128
+        versionName = "1.2.8"
     }
 
     buildTypes {
