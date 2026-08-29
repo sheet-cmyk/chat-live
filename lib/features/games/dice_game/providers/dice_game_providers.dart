@@ -52,7 +52,11 @@ class _CountdownNotifier extends StateNotifier<int> {
   _CountdownNotifier(this._ref, this._roomId) : super(16) {
     _sub = _ref.listen(
       diceRoundProvider(_roomId),
-      (_, next) => _onRound(next.valueOrNull),
+      (_, next) => _onRound(next.when(
+        data: (r) => r,
+        loading: () => null,
+        error: (_, __) => null,
+      )),
       fireImmediately: true,
     );
   }

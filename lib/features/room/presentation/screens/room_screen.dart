@@ -114,11 +114,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       await ref.read(chatWriterProvider(_roomId)).sendSystem(
         '${me.displayName ?? 'مستخدم'} انضم للغرفة 🎉',
       );
+      if (!mounted) return;
 
       // طلب إذن الميكروفون
       final micStatus = await Permission.microphone.request();
+      if (!mounted) return;
       if (!micStatus.isGranted) {
-        if (mounted) _showSnack('يرجى السماح باستخدام الميكروفون للانضمام للغرفة');
+        _showSnack('يرجى السماح باستخدام الميكروفون للانضمام للغرفة');
       }
 
       // تهيئة ZEGOCLOUD وانضمام للغرفة
@@ -128,6 +130,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         userId: me.uid,
         userName: me.displayName ?? 'مستخدم',
       );
+      if (!mounted) return;
 
       // mic stays muted until user takes a seat
       ref.read(isMicMutedProvider.notifier).state = true;

@@ -90,7 +90,26 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['totalGiftsRoom'])
             && request.resource.data.get('totalGiftsRoom', 0)
-               >= resource.data.get('totalGiftsRoom', 0));
+               >= resource.data.get('totalGiftsRoom', 0))
+        // PK: أي مستخدم يمكنه الصعود/النزول من مقاعد التحدي
+        || (isSignedIn()
+            && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['pkHostPlayerId', 'pkHostPlayerName', 'pkHostPlayerAvatar',
+                         'pkRedPlayerId',  'pkRedPlayerName',  'pkRedPlayerAvatar',
+                         'pkBluePlayerId', 'pkBluePlayerName', 'pkBluePlayerAvatar']))
+        // PK: أي مستخدم يمكنه بدء التحدي (من حالة waiting)
+        || (isSignedIn()
+            && resource.data.get('pkStatus', 'idle') == 'waiting'
+            && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['pkStatus', 'pkEndsAt']))
+        // PK: درجات التحدي — زيادة فقط من خلال نظام الهدايا
+        || (isSignedIn()
+            && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['pkRedScore', 'pkBlueScore'])
+            && request.resource.data.get('pkRedScore', 0)
+               >= resource.data.get('pkRedScore', 0)
+            && request.resource.data.get('pkBlueScore', 0)
+               >= resource.data.get('pkBlueScore', 0));
       allow delete: if isRoomHost(roomId) || isAdmin();
 
       // مقاعد الغرفة
